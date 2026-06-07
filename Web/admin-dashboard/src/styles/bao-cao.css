@@ -1,0 +1,27 @@
+@reference "../index.css";
+
+@layer components {
+  /* Chart wrapper */
+  .bc-chart-box { @apply bg-card rounded-lg p-5 border border-border shadow-sm; }
+  .bc-chart-title { @apply text-sm font-bold text-foreground mb-0.5; }
+  .bc-chart-sub   { @apply text-xs text-muted-foreground mb-4; }
+  .bc-chart-empty {
+    @apply flex flex-col items-center justify-center h-48 rounded-md bg-secondary border border-dashed border-border;
+  }
+
+  /* Report card */
+  .bc-report-card { @apply bg-card rounded-lg p-5 border border-border shadow-sm flex items-start gap-4; }
+  .bc-report-icon { @apply w-10 h-10 rounded-md flex items-center justify-center shrink-0; }
+  .bc-report-title { @apply text-sm font-semibold text-foreground; }
+  .bc-report-desc  { @apply text-xs text-muted-foreground mt-0.5 mb-3; }
+
+  /* Period export button */
+  .bc-period-btn {
+    @apply px-2.5 py-1 rounded-md text-xs font-medium bg-secondary text-muted-foreground
+           border border-border hover:bg-primary hover:text-primary-foreground hover:border-primary
+           transition-all duration-150 inline-flex items-center gap-1;
+  }
+
+  /* Section heading */
+  .bc-section-title { @apply text-sm font-bold text-foreground mb-3; }
+}

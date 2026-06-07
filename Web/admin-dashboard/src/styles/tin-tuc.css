@@ -1,0 +1,24 @@
+@reference "../index.css";
+
+@layer components {
+  /* Article card (grid view) */
+  .tt-article-card {
+    @apply bg-card rounded-lg border border-border shadow-sm overflow-hidden
+           hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer;
+  }
+  .tt-article-thumb { @apply w-full h-36 bg-secondary object-cover; }
+  .tt-article-body  { @apply p-4 space-y-1.5; }
+  .tt-article-title { @apply text-sm font-semibold text-foreground line-clamp-2 leading-snug; }
+  .tt-article-meta  { @apply text-xs text-muted-foreground; }
+
+  /* Status chips */
+  .tt-status-published { @apply bg-emerald-100 text-emerald-700 text-xs font-semibold px-2.5 py-0.5 rounded-full; }
+  .tt-status-draft     { @apply bg-secondary text-muted-foreground text-xs font-semibold px-2.5 py-0.5 rounded-full; }
+  .tt-status-scheduled { @apply bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-0.5 rounded-full; }
+
+  /* Category badge */
+  .tt-category { @apply bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded; }
+
+  /* View count */
+  .tt-views { @apply flex items-center gap-1 text-xs text-muted-foreground; }
+}

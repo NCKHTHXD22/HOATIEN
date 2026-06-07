@@ -1,0 +1,30 @@
+@reference "../index.css";
+
+@layer components {
+  /* Staff table status */
+  .ns-status-active   { @apply bg-emerald-100 text-emerald-700 text-xs font-semibold px-2.5 py-0.5 rounded-full; }
+  .ns-status-leave    { @apply bg-amber-100   text-amber-700   text-xs font-semibold px-2.5 py-0.5 rounded-full; }
+  .ns-status-resigned { @apply bg-secondary   text-muted-foreground text-xs font-semibold px-2.5 py-0.5 rounded-full; }
+
+  /* Staff card (grid view) */
+  .ns-staff-card {
+    @apply bg-card rounded-lg border border-border p-4 flex items-center gap-4
+           hover:shadow-md hover:-translate-y-0.5 transition-all duration-200;
+  }
+  .ns-avatar {
+    @apply w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0;
+  }
+  .ns-name     { @apply text-sm font-semibold text-foreground; }
+  .ns-role     { @apply text-xs text-muted-foreground mt-0.5; }
+  .ns-dept     { @apply text-xs text-primary font-medium mt-1; }
+
+  /* View toggle (table / grid) */
+  .ns-view-toggle  { @apply flex rounded-md overflow-hidden border border-border; }
+  .ns-view-btn     { @apply w-8 h-8 flex items-center justify-center text-sm transition-colors text-muted-foreground hover:bg-secondary; }
+  .ns-view-btn-on  { @apply bg-primary/10 text-primary; }
+
+  /* Grid empty placeholder */
+  .ns-grid-empty {
+    @apply flex items-center justify-center py-16 rounded-md bg-secondary border border-dashed border-border;
+  }
+}

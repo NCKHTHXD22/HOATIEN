@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────
+
+enum Gender {
+  NAM
+  NU
+  KHAC
+}
+
+enum HoStatus {
+  ACTIVE
+  DA_TACH
+  DA_GIAI_THE
+}
+
+enum HoType {
+  THUONG_TRU
+  TAM_TRU
+  TAM_VANG
+}
+
+enum MemberStatus {
+  ACTIVE
+  DA_CHUYEN_DI
+  DA_MAN
+}
+
+enum MovementType {
+  MOVE_IN
+  MOVE_OUT
+}
+
+enum RelationType {
+  SPLIT
+  MERGE
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN_VILLAGE
+  VIEWER
+}
+
+// ─── MODELS ──────────────────────────────────────────────
+
+model Village {
+  id          String      @id @default(cuid())
+  ma          String      @unique
+  ten         String
+  truongThon  String?
+  households  Household[]
+  admins      AdminUser[] @relation("AdminVillages")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("villages")
+}
+
+model AdminUser {
+  id            String           @id @default(cuid())
+  username      String           @unique
+  passwordHash  String
+  hoTen         String
+  role          AdminRole        @default(ADMIN_VILLAGE)
+  zaloUserId    String?          @unique
+  isActive      Boolean          @default(true)
+  villages      Village[]        @relation("AdminVillages")
+  movements     MovementRecord[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@map("admin_users")
+}
+
+model Household {
+  id          String           @id @default(cuid())
+  soHoKhau    String           @unique
+  diaChi      String
+  lat         Float?
+  lng         Float?
+  trangThai   HoStatus         @default(ACTIVE)
+  loaiHo      HoType           @default(THUONG_TRU)
+  village     Village          @relation(fields: [villageId], references: [id])
+  villageId   String
+  members     Member[]
+  movements   MovementRecord[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([villageId])
+  @@index([trangThai])
+  @@map("households")
+}
+
+model Member {
+  id            String       @id @default(cuid())
+  hoTen         String
+  ngaySinh      DateTime?
+  gioiTinh      Gender
+  cccd          String?      @unique
+  sdt           String?
+  quanHeChuHo   String
+  laChuHo       Boolean      @default(false)
+  trangThai     MemberStatus @default(ACTIVE)
+  household     Household    @relation(fields: [householdId], references: [id])
+  householdId   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([householdId])
+  @@index([cccd])
+  @@index([sdt])
+  @@map("members")
+}
+
+model MovementRecord {
+  id            String       @id @default(cuid())
+  loai          MovementType
+  ngay          DateTime
+  nguonGoc      String?
+  noiDen        String?
+  ghiChu        String?
+  household     Household    @relation(fields: [householdId], references: [id])
+  householdId   String
+  performedBy   AdminUser    @relation(fields: [performedById], references: [id])
+  performedById String
+  createdAt     DateTime     @default(now())
+
+  @@index([householdId])
+  @@index([ngay])
+  @@map("movement_records")
+}
+
+model HouseholdRelation {
+  id        String       @id @default(cuid())
+  type      RelationType
+  sourceId  String
+  targetId  String
+  memberIds String[]
+  date      DateTime     @default(now())
+  note      String?
+
+  @@index([sourceId])
+  @@index([targetId])
+  @@map("household_relations")
+}

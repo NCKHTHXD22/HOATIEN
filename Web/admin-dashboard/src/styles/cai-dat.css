@@ -1,0 +1,31 @@
+@reference "../index.css";
+
+@layer components {
+  /* Settings side nav */
+  .cd-nav          { @apply bg-card rounded-lg border border-border shadow-sm p-2 h-fit; }
+  .cd-nav-item     {
+    @apply w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-left transition-all mb-0.5
+           text-muted-foreground hover:bg-secondary border-l-2 border-transparent;
+  }
+  .cd-nav-item-on  { @apply bg-primary/10 text-primary font-semibold border-l-primary; }
+
+  /* Settings panel */
+  .cd-panel        { @apply bg-card rounded-lg border border-border shadow-sm p-6 lg:col-span-3; }
+  .cd-section-title { @apply text-sm font-bold text-foreground pb-3 mb-5 border-b border-border; }
+
+  /* Notification / option row */
+  .cd-row       { @apply flex items-center justify-between py-3 border-b border-border/50; }
+  .cd-row-label { @apply text-sm text-foreground; }
+
+  /* Toggle switch */
+  .cd-toggle        { @apply relative w-10 h-5 rounded-full transition-colors cursor-pointer select-none; }
+  .cd-toggle-on     { @apply bg-primary; }
+  .cd-toggle-off    { @apply bg-secondary border border-border; }
+  .cd-toggle-thumb  { @apply absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform; }
+  .cd-toggle-thumb-on { @apply translate-x-5; }
+
+  /* Danger zone */
+  .cd-danger-zone   { @apply rounded-lg border border-destructive/30 bg-red-50/50 p-5 mt-4; }
+  .cd-danger-title  { @apply text-sm font-bold text-destructive mb-1; }
+  .cd-danger-desc   { @apply text-xs text-muted-foreground mb-3; }
+}

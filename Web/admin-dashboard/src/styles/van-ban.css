@@ -1,0 +1,21 @@
+@reference "../index.css";
+
+@layer components {
+  /* Document type badge */
+  .vb-type-badge { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground; }
+  .vb-type-den   { @apply bg-blue-50   text-blue-700; }
+  .vb-type-di    { @apply bg-emerald-50 text-emerald-700; }
+  .vb-type-noibo { @apply bg-violet-50  text-violet-700; }
+
+  /* Status */
+  .vb-status-active  { @apply text-emerald-700 bg-emerald-50 border border-emerald-200 text-xs px-2.5 py-0.5 rounded-full font-semibold; }
+  .vb-status-expired { @apply text-muted-foreground bg-secondary border border-border text-xs px-2.5 py-0.5 rounded-full font-semibold; }
+
+  /* Document number cell */
+  .vb-so-hieu { @apply text-sm font-semibold text-primary hover:underline cursor-pointer; }
+
+  /* Download icon button */
+  .vb-download-btn {
+    @apply p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors;
+  }
+}
