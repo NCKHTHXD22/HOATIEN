@@ -5,6 +5,15 @@ import { PageHeader, PrimaryBtn, StatCard } from '../components/ui'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts'
 import * as reportService from '../services/reportService'
 
+function downloadCsv(rows, filename) {
+  const csv = rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
 const COLORS = ['#2563eb', '#16a34a', '#7c3aed', '#d97706', '#0891b2', '#dc2626', '#059669', '#f59e0b']
 
 export default function BaoCao() {
@@ -29,6 +38,37 @@ export default function BaoCao() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const exportTongHop = () => {
+    const now = new Date().toLocaleDateString('vi-VN')
+    const rows = [
+      ['BÁO CÁO TỔNG HỢP DÂN SỐ — UBND XÃ HÒA TIẾN'],
+      [`Ngày xuất: ${now}`],
+      [],
+      ['=== TỔNG QUAN ==='],
+      ['Chỉ số', 'Giá trị'],
+      ['Tổng hộ dân',    summary?.households ?? 0],
+      ['Tổng nhân khẩu', summary?.members    ?? 0],
+      ['Số thôn',        summary?.villages   ?? 0],
+      ['Biến động ròng', movStats?.net       ?? 0],
+      ['Chuyển đến',     movStats?.moveIn    ?? 0],
+      ['Chuyển đi',      movStats?.moveOut   ?? 0],
+      [],
+      ['=== THỐNG KÊ THEO THÔN ==='],
+      ['Thôn', 'Mã', 'Tổng hộ', 'Đang hoạt động', 'Nhân khẩu', 'Thường trú', 'Tạm trú', 'Tạm vắng'],
+      ...byVillage.map(v => [
+        v.villageName,
+        v.ma,
+        v.totalHouseholds,
+        v.activeHouseholds,
+        v.totalMembers,
+        v.byType?.THUONG_TRU ?? 0,
+        v.byType?.TAM_TRU    ?? 0,
+        v.byType?.TAM_VANG   ?? 0,
+      ]),
+    ]
+    downloadCsv(rows, `bao-cao-tong-hop-${now.replace(/\//g, '-')}.csv`)
   }
 
   useEffect(() => { load() }, [])
@@ -77,7 +117,7 @@ export default function BaoCao() {
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
-            <PrimaryBtn><Download size={14} /> Xuất báo cáo tổng hợp</PrimaryBtn>
+            <PrimaryBtn onClick={exportTongHop} disabled={loading}><Download size={14} /> Xuất báo cáo tổng hợp</PrimaryBtn>
           </div>
         }
       />
@@ -195,10 +235,68 @@ export default function BaoCao() {
         <p className="bc-section-title">Xuất báo cáo theo loại</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
-            { title: 'Báo cáo hộ dân theo thôn',       desc: 'Tổng hợp hộ dân, nhân khẩu phân theo từng thôn',        icon: Home,    color: '#2563eb', periods: ['Tháng', 'Quý', 'Năm'] },
-            { title: 'Báo cáo biến động dân số',        desc: 'Số hộ chuyển đến, chuyển đi trong kỳ báo cáo',          icon: TrendingUp, color: '#16a34a', periods: ['Tháng', 'Quý', 'Năm'] },
-            { title: 'Báo cáo phân loại hộ khẩu',      desc: 'Thống kê thường trú, tạm trú, tạm vắng theo thời gian', icon: BarChart3,  color: '#7c3aed', periods: ['Tháng', 'Năm'] },
-            { title: 'Báo cáo nhân khẩu học',          desc: 'Cơ cấu giới tính, độ tuổi, phân bổ nhân khẩu',          icon: Calendar,  color: '#d97706', periods: ['Quý', 'Năm'] },
+            { title: 'Báo cáo hộ dân theo thôn',       desc: 'Tổng hợp hộ dân, nhân khẩu phân theo từng thôn',        icon: Home,    color: '#2563eb', periods: ['Tháng', 'Quý', 'Năm'],
+              onExport: () => {
+                const now = new Date().toLocaleDateString('vi-VN')
+                const rows = [
+                  ['BÁO CÁO HỘ DÂN THEO THÔN — UBND XÃ HÒA TIẾN'],
+                  [`Ngày xuất: ${now}`],
+                  [],
+                  ['Thôn', 'Mã', 'Tổng hộ', 'Đang hoạt động', 'Nhân khẩu', 'Thường trú', 'Tạm trú', 'Tạm vắng'],
+                  ...byVillage.map(v => [v.villageName, v.ma, v.totalHouseholds, v.activeHouseholds, v.totalMembers, v.byType?.THUONG_TRU??0, v.byType?.TAM_TRU??0, v.byType?.TAM_VANG??0]),
+                ]
+                downloadCsv(rows, `bao-cao-ho-dan-theo-thon-${now.replace(/\//g,'-')}.csv`)
+              }
+            },
+            { title: 'Báo cáo biến động dân số',        desc: 'Số hộ chuyển đến, chuyển đi trong kỳ báo cáo',          icon: TrendingUp, color: '#16a34a', periods: ['Tháng', 'Quý', 'Năm'],
+              onExport: () => {
+                const now = new Date().toLocaleDateString('vi-VN')
+                const rows = [
+                  ['BÁO CÁO BIẾN ĐỘNG DÂN SỐ — UBND XÃ HÒA TIẾN'],
+                  [`Ngày xuất: ${now}`],
+                  [],
+                  ['Chỉ số', 'Số lượng'],
+                  ['Chuyển đến (Move In)',  movStats?.moveIn  ?? 0],
+                  ['Chuyển đi (Move Out)', movStats?.moveOut ?? 0],
+                  ['Biến động ròng (Net)', movStats?.net     ?? 0],
+                ]
+                downloadCsv(rows, `bao-cao-bien-dong-${now.replace(/\//g,'-')}.csv`)
+              }
+            },
+            { title: 'Báo cáo phân loại hộ khẩu',      desc: 'Thống kê thường trú, tạm trú, tạm vắng theo thời gian', icon: BarChart3,  color: '#7c3aed', periods: ['Tháng', 'Năm'],
+              onExport: () => {
+                const now = new Date().toLocaleDateString('vi-VN')
+                const tt = byVillage.reduce((a,v) => a + (v.byType?.THUONG_TRU??0), 0)
+                const tr = byVillage.reduce((a,v) => a + (v.byType?.TAM_TRU??0), 0)
+                const tv = byVillage.reduce((a,v) => a + (v.byType?.TAM_VANG??0), 0)
+                const rows = [
+                  ['BÁO CÁO PHÂN LOẠI HỘ KHẨU — UBND XÃ HÒA TIẾN'],
+                  [`Ngày xuất: ${now}`],
+                  [],
+                  ['Loại hộ', 'Số hộ'],
+                  ['Thường trú', tt],
+                  ['Tạm trú',   tr],
+                  ['Tạm vắng',  tv],
+                  ['Tổng',      tt + tr + tv],
+                ]
+                downloadCsv(rows, `bao-cao-phan-loai-ho-khau-${now.replace(/\//g,'-')}.csv`)
+              }
+            },
+            { title: 'Báo cáo nhân khẩu học',          desc: 'Cơ cấu giới tính, độ tuổi, phân bổ nhân khẩu',          icon: Calendar,  color: '#d97706', periods: ['Quý', 'Năm'],
+              onExport: () => {
+                const now = new Date().toLocaleDateString('vi-VN')
+                const rows = [
+                  ['BÁO CÁO NHÂN KHẨU HỌC — UBND XÃ HÒA TIẾN'],
+                  [`Ngày xuất: ${now}`],
+                  [],
+                  ['Chỉ số', 'Giá trị'],
+                  ['Tổng nhân khẩu', summary?.members   ?? 0],
+                  ['Tổng hộ dân',    summary?.households ?? 0],
+                  ['Số thôn',        summary?.villages  ?? 0],
+                ]
+                downloadCsv(rows, `bao-cao-nhan-khau-hoc-${now.replace(/\//g,'-')}.csv`)
+              }
+            },
           ].map(r => (
             <div key={r.title} className="bc-report-card">
               <div className="bc-report-icon" style={{ backgroundColor: r.color + '18' }}>
@@ -212,6 +310,7 @@ export default function BaoCao() {
                     <button
                       key={p}
                       className="bc-period-btn"
+                      onClick={r.onExport}
                       onMouseOver={e => { e.currentTarget.style.backgroundColor = r.color; e.currentTarget.style.borderColor = r.color }}
                       onMouseOut={e => { e.currentTarget.style.backgroundColor = ''; e.currentTarget.style.borderColor = '' }}
                     >

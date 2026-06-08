@@ -1,7 +1,7 @@
 import '../styles/nhan-su.css'
 import { useState, useEffect } from 'react'
-import { Plus, Filter, Users, UserCheck, UserX } from 'lucide-react'
-import { PageHeader, PrimaryBtn, SecondaryBtn, DataTable, Tabs, SearchInput, StatCard, Badge } from '../components/ui'
+import { Plus, Filter, Users, UserCheck, UserX, Eye, EyeOff, Pencil, Lock, Unlock } from 'lucide-react'
+import { PageHeader, PrimaryBtn, SecondaryBtn, DataTable, Tabs, SearchInput, StatCard, Badge, Modal, Select, FormInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import * as authService from '../services/authService'
 
@@ -11,7 +11,15 @@ const ROLE_LABEL = {
   VIEWER:        { label: 'Xem',           variant: 'default' },
 }
 
-const COLUMNS = ['Họ tên', 'Tên đăng nhập', 'Phân quyền', 'Trạng thái', '']
+const ROLE_OPTIONS = [
+  { value: 'SUPER_ADMIN',   label: 'Quản trị viên (Super Admin)' },
+  { value: 'ADMIN_VILLAGE', label: 'Cán bộ thôn (Admin Village)' },
+  { value: 'VIEWER',        label: 'Chỉ xem (Viewer)' },
+]
+
+const COLUMNS = ['Họ tên', 'Tên đăng nhập', 'Phân quyền', 'Trạng thái', 'Ngày tạo', '']
+
+const EMPTY_FORM = { hoTen: '', username: '', password: '', role: 'VIEWER' }
 
 export default function NhanSu() {
   const { user: currentUser } = useAuth()
@@ -22,13 +30,22 @@ export default function NhanSu() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  // Add modal
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [showPwd, setShowPwd] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadUsers = () => {
     if (!isSuperAdmin) { setLoading(false); return }
     authService.getUsers()
       .then(res => setUsers(res.data.data || []))
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [isSuperAdmin])
+  }
+
+  useEffect(() => { loadUsers() }, [isSuperAdmin])
 
   const filtered = users.filter(u => {
     const matchTab = tab === 'Tất cả'
@@ -48,6 +65,33 @@ export default function NhanSu() {
     super:  users.filter(u => u.role === 'SUPER_ADMIN').length,
   }
 
+  const openAdd = () => {
+    setForm(EMPTY_FORM)
+    setError('')
+    setShowPwd(false)
+    setShowAdd(true)
+  }
+
+  const handleAdd = async () => {
+    if (!form.hoTen.trim())    { setError('Vui lòng nhập họ tên'); return }
+    if (!form.username.trim()) { setError('Vui lòng nhập tên đăng nhập'); return }
+    if (form.username.length < 3) { setError('Tên đăng nhập phải có ít nhất 3 ký tự'); return }
+    if (!form.password)        { setError('Vui lòng nhập mật khẩu'); return }
+    if (form.password.length < 6) { setError('Mật khẩu phải có ít nhất 6 ký tự'); return }
+    setSaving(true)
+    setError('')
+    try {
+      await authService.createUser(form)
+      setShowAdd(false)
+      setLoading(true)
+      loadUsers()
+    } catch (e) {
+      setError(e.response?.data?.message || 'Tạo tài khoản thất bại')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
@@ -57,7 +101,7 @@ export default function NhanSu() {
           isSuperAdmin && (
             <div className="flex gap-2">
               <SecondaryBtn><Filter size={14} /> Lọc</SecondaryBtn>
-              <PrimaryBtn><Plus size={14} /> Thêm tài khoản</PrimaryBtn>
+              <PrimaryBtn onClick={openAdd}><Plus size={14} /> Thêm tài khoản</PrimaryBtn>
             </div>
           )
         }
@@ -106,6 +150,22 @@ export default function NhanSu() {
                     <td className="px-5 py-3 text-xs text-muted-foreground">
                       {new Date(u.createdAt).toLocaleDateString('vi-VN')}
                     </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors"
+                          title="Chỉnh sửa"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          className={`p-1.5 rounded hover:bg-secondary transition-colors ${u.isActive ? 'text-muted-foreground hover:text-destructive' : 'text-muted-foreground hover:text-green-600'}`}
+                          title={u.isActive ? 'Khóa tài khoản' : 'Mở khóa'}
+                        >
+                          {u.isActive ? <Lock size={13} /> : <Unlock size={13} />}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 )
               })
@@ -117,6 +177,69 @@ export default function NhanSu() {
           </div>
         </div>
       )}
+
+      {/* Modal Thêm tài khoản */}
+      <Modal
+        title="Thêm tài khoản mới"
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        footer={
+          <>
+            <SecondaryBtn onClick={() => setShowAdd(false)}>Hủy</SecondaryBtn>
+            <PrimaryBtn onClick={handleAdd} disabled={saving}>
+              {saving ? 'Đang lưu...' : 'Tạo tài khoản'}
+            </PrimaryBtn>
+          </>
+        }
+      >
+        {error && (
+          <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">{error}</p>
+        )}
+        <FormInput
+          label="Họ và tên"
+          required
+          placeholder="Nguyễn Văn A"
+          value={form.hoTen}
+          onChange={e => setForm(f => ({ ...f, hoTen: e.target.value }))}
+        />
+        <FormInput
+          label="Tên đăng nhập"
+          required
+          placeholder="nguyenvana (tối thiểu 3 ký tự)"
+          value={form.username}
+          onChange={e => setForm(f => ({ ...f, username: e.target.value.trim() }))}
+        />
+        <div>
+          <label className="block text-xs font-semibold text-foreground mb-1.5">
+            Mật khẩu <span className="text-destructive">*</span>
+          </label>
+          <div className="relative">
+            <input
+              type={showPwd ? 'text' : 'password'}
+              placeholder="Tối thiểu 6 ký tự"
+              value={form.password}
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              className="w-full px-3 py-2 pr-10 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPwd(v => !v)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          </div>
+        </div>
+        <Select
+          label="Phân quyền"
+          value={form.role}
+          onChange={val => setForm(f => ({ ...f, role: val }))}
+          options={ROLE_OPTIONS}
+        />
+        <div className="text-xs text-muted-foreground bg-secondary rounded-md px-3 py-2">
+          <strong>Lưu ý:</strong> Tài khoản mới sẽ được kích hoạt ngay sau khi tạo.
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 // UI primitives — uses design-system tokens from tailwind.config.js
+import { X } from 'lucide-react'
 
 export function Card({ children, className = '' }) {
   return (
@@ -177,5 +178,80 @@ export function ActionBtn({ icon: Icon, color = 'currentColor', onClick }) {
     >
       <Icon size={14} />
     </button>
+  )
+}
+
+export function Modal({ title, open, onClose, children, footer }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <h2 className="text-base font-bold text-foreground">{title}</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-6 py-5 overflow-y-auto flex-1 space-y-4">{children}</div>
+        {footer && (
+          <div className="px-6 py-4 border-t border-border flex justify-end gap-2 shrink-0">{footer}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function Select({ label, value, onChange, options, required }) {
+  return (
+    <div>
+      {label && (
+        <label className="block text-xs font-semibold text-foreground mb-1.5">
+          {label}{required && <span className="text-destructive ml-0.5">*</span>}
+        </label>
+      )}
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-3 py-2 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none"
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+export function Textarea({ label, required, ...props }) {
+  return (
+    <div>
+      {label && (
+        <label className="block text-xs font-semibold text-foreground mb-1.5">
+          {label}{required && <span className="text-destructive ml-0.5">*</span>}
+        </label>
+      )}
+      <textarea
+        {...props}
+        rows={props.rows || 4}
+        className="w-full px-3 py-2 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none resize-none"
+      />
+    </div>
+  )
+}
+
+export function FormInput({ label, required, ...props }) {
+  return (
+    <div>
+      {label && (
+        <label className="block text-xs font-semibold text-foreground mb-1.5">
+          {label}{required && <span className="text-destructive ml-0.5">*</span>}
+        </label>
+      )}
+      <input
+        {...props}
+        className="w-full px-3 py-2 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none"
+      />
+    </div>
   )
 }
