@@ -2,7 +2,7 @@ import '../styles/ho-so.css'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Filter, Home, Users, ArrowRightLeft, CheckCircle,
-  Eye, Pencil, Trash2, ArrowDownToLine, ArrowUpFromLine, History, Scissors,
+  Eye, Pencil, Trash2, ArrowDownToLine, ArrowUpFromLine, History, Scissors, GitMerge,
 } from 'lucide-react'
 import {
   PageHeader, PrimaryBtn, SecondaryBtn, DataTable, Tabs,
@@ -84,6 +84,18 @@ export default function HoSo() {
   const [splitSelected, setSplitSel]   = useState([])
   const [splitErr, setSplitErr]         = useState('')
   const [splitSaving, setSplitSaving]   = useState(false)
+
+  /* Merge modal (UC06) */
+  const [showMerge, setShowMerge]         = useState(false)
+  const [mergeAll, setMergeAll]           = useState([])
+  const [mergeLoading, setMergeLoading]   = useState(false)
+  const [mergeTarget, setMergeTarget]     = useState('')
+  const [mergeSources, setMergeSources]   = useState(new Set())
+  const [mergeSearchT, setMergeSearchT]   = useState('')
+  const [mergeSearchS, setMergeSearchS]   = useState('')
+  const [mergeNote, setMergeNote]         = useState('')
+  const [mergeErr, setMergeErr]           = useState('')
+  const [mergeSaving, setMergeSaving]     = useState(false)
 
   /* ── Loaders ── */
   const loadStats = useCallback(async () => {
@@ -235,6 +247,47 @@ export default function HoSo() {
     finally { setSplitSaving(false) }
   }
 
+  /* ── Merge (UC06) ── */
+  const openMerge = async () => {
+    setMergeTarget(''); setMergeSources(new Set())
+    setMergeSearchT(''); setMergeSearchS('')
+    setMergeNote(''); setMergeErr('')
+    setShowMerge(true); setMergeLoading(true)
+    try {
+      const res = await householdService.getAll({ limit: 500 })
+      setMergeAll(res.data.data || [])
+    } catch {} finally { setMergeLoading(false) }
+  }
+  const toggleMergeSource = id => setMergeSources(s => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  const handleMerge = async () => {
+    if (!mergeTarget)           { setMergeErr('Vui lòng chọn hộ nhận'); return }
+    if (mergeSources.size === 0){ setMergeErr('Vui lòng chọn ít nhất 1 hộ để gộp vào'); return }
+    setMergeSaving(true); setMergeErr('')
+    try {
+      const res = await householdService.merge({ targetId: mergeTarget, sourceIds: [...mergeSources], ghiChu: mergeNote })
+      setShowMerge(false)
+      await refresh()
+      alert(res.data.message || 'Gộp hộ thành công!')
+    } catch (e) { setMergeErr(e.response?.data?.message || 'Gộp hộ thất bại') }
+    finally { setMergeSaving(false) }
+  }
+  const mergeTargetHH  = mergeAll.find(h => h.id === mergeTarget)
+  const filteredTargets = mergeAll.filter(h => {
+    const q = mergeSearchT.toLowerCase()
+    return !q || h.soHoKhau.toLowerCase().includes(q) || h.diaChi.toLowerCase().includes(q)
+  })
+  const filteredSources = mergeAll.filter(h => {
+    if (h.id === mergeTarget) return false
+    const q = mergeSearchS.toLowerCase()
+    return !q || h.soHoKhau.toLowerCase().includes(q) || h.diaChi.toLowerCase().includes(q)
+  })
+  const totalMergeMembers = [...mergeSources].reduce((s, id) => {
+    const h = mergeAll.find(x => x.id === id)
+    return s + (h?.members?.length ?? 0)
+  }, 0)
+
   /* ── Options ── */
   const villageOpts  = [{ value: '', label: '-- Chọn thôn --' }, ...villages.map(v => ({ value: v.id, label: v.ten }))]
   const loaiHoOpts   = [{ value: 'THUONG_TRU', label: 'Thường trú' }, { value: 'TAM_TRU', label: 'Tạm trú' }, { value: 'TAM_VANG', label: 'Tạm vắng' }]
@@ -256,6 +309,7 @@ export default function HoSo() {
         action={
           <div className="flex items-center gap-2">
             <SecondaryBtn><Filter size={14} /> Lọc</SecondaryBtn>
+            <SecondaryBtn onClick={openMerge}><GitMerge size={14} /> Gộp hộ</SecondaryBtn>
             <PrimaryBtn onClick={openAdd}><Plus size={14} /> Thêm hộ dân</PrimaryBtn>
           </div>
         }
@@ -479,6 +533,128 @@ export default function HoSo() {
         <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
           Hộ mới sẽ được tạo với số HK tự động. Hộ cũ sẽ được đánh dấu "Đã tách" nếu không còn thành viên.
         </p>
+      </Modal>
+
+      {/* ══ Modal Gộp hộ (UC06) ══ */}
+      <Modal wide title="Gộp hộ dân" open={showMerge} onClose={() => setShowMerge(false)}
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <p className="text-xs text-muted-foreground">
+              {mergeTarget && mergeSources.size > 0
+                ? `Gộp ${mergeSources.size} hộ → ${mergeTargetHH?.soHoKhau} · ~${totalMergeMembers} nhân khẩu chuyển đến`
+                : 'Chọn hộ nhận và các hộ cần gộp'}
+            </p>
+            <div className="flex gap-2">
+              <SecondaryBtn onClick={() => setShowMerge(false)}>Hủy</SecondaryBtn>
+              <PrimaryBtn onClick={handleMerge} disabled={mergeSaving}>
+                {mergeSaving ? 'Đang gộp...' : <><GitMerge size={14} /> Xác nhận gộp hộ</>}
+              </PrimaryBtn>
+            </div>
+          </div>
+        }>
+        {mergeErr && <ErrBox msg={mergeErr} />}
+
+        <div className="grid grid-cols-2 gap-4">
+          {/* Cột trái — Hộ nhận */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+              Hộ nhận <span className="text-destructive">*</span>
+              <span className="ml-1 text-muted-foreground font-normal normal-case">(chọn 1)</span>
+            </p>
+            <input
+              value={mergeSearchT}
+              onChange={e => setMergeSearchT(e.target.value)}
+              placeholder="Tìm số HK, địa chỉ..."
+              className="w-full px-3 py-1.5 rounded-md text-xs bg-card border border-input focus:border-ring outline-none"
+            />
+            <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+              {mergeLoading ? (
+                <p className="text-xs text-muted-foreground text-center py-4">Đang tải...</p>
+              ) : filteredTargets.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">Không tìm thấy</p>
+              ) : filteredTargets.map(h => (
+                <label key={h.id}
+                  className={`flex items-start gap-2 px-3 py-2 rounded-md cursor-pointer border transition-colors ${
+                    mergeTarget === h.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border bg-secondary hover:border-primary/30'
+                  }`}>
+                  <input type="radio" name="mergeTarget" checked={mergeTarget === h.id}
+                    onChange={() => { setMergeTarget(h.id); setMergeSources(s => { const n = new Set(s); n.delete(h.id); return n }) }}
+                    className="mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">{h.soHoKhau}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{h.diaChi}</p>
+                    <p className="text-[11px] text-muted-foreground">{h.village?.ten} · {h.members?.length ?? 0} người</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Cột phải — Hộ bị gộp */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+              Hộ bị gộp <span className="text-destructive">*</span>
+              <span className="ml-1 text-muted-foreground font-normal normal-case">(chọn nhiều)</span>
+            </p>
+            <input
+              value={mergeSearchS}
+              onChange={e => setMergeSearchS(e.target.value)}
+              placeholder="Tìm số HK, địa chỉ..."
+              className="w-full px-3 py-1.5 rounded-md text-xs bg-card border border-input focus:border-ring outline-none"
+            />
+            <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+              {mergeLoading ? (
+                <p className="text-xs text-muted-foreground text-center py-4">Đang tải...</p>
+              ) : filteredSources.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  {!mergeTarget ? 'Chọn hộ nhận trước' : 'Không tìm thấy'}
+                </p>
+              ) : filteredSources.map(h => (
+                <label key={h.id}
+                  className={`flex items-start gap-2 px-3 py-2 rounded-md cursor-pointer border transition-colors ${
+                    mergeSources.has(h.id)
+                      ? 'border-amber-400 bg-amber-50'
+                      : 'border-border bg-secondary hover:border-amber-300'
+                  }`}>
+                  <input type="checkbox" checked={mergeSources.has(h.id)}
+                    onChange={() => toggleMergeSource(h.id)}
+                    className="mt-0.5 shrink-0 rounded" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">
+                      {h.soHoKhau}
+                      {h.trangThai === 'DA_GIAI_THE' && <span className="ml-1 text-[10px] text-red-500">(Đã giải thể)</span>}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">{h.diaChi}</p>
+                    <p className="text-[11px] text-muted-foreground">{h.village?.ten} · {h.members?.length ?? 0} người</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Ghi chú */}
+        <div>
+          <label className="block text-xs font-semibold text-foreground mb-1.5">Ghi chú</label>
+          <input value={mergeNote} onChange={e => setMergeNote(e.target.value)}
+            placeholder="Lý do gộp hộ, quyết định số..."
+            className="w-full px-3 py-2 rounded-md text-sm bg-card border border-input focus:border-ring outline-none" />
+        </div>
+
+        {/* Preview */}
+        {mergeTarget && mergeSources.size > 0 && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200">
+            <GitMerge size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-800 space-y-0.5">
+              <p className="font-semibold">Xem trước kết quả gộp hộ:</p>
+              <p>· {mergeSources.size} hộ sẽ được đánh dấu <strong>Đã giải thể</strong></p>
+              <p>· ~{totalMergeMembers} nhân khẩu chuyển sang hộ <strong>{mergeTargetHH?.soHoKhau}</strong></p>
+              <p>· Lịch sử gộp hộ được ghi vào audit log</p>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
