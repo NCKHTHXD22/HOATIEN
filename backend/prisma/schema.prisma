@@ -49,6 +49,28 @@ enum AdminRole {
   VIEWER
 }
 
+enum NotifStatus {
+  NHAP
+  CHO_GUI
+  DANG_GUI
+  DA_GUI
+  DA_HUY
+}
+
+enum SendStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+  CONFIRMED
+}
+
+enum SurveyQType {
+  SINGLE
+  MULTIPLE
+  TEXT
+}
+
 // ─── MODELS ──────────────────────────────────────────────
 
 model Village {
@@ -74,6 +96,8 @@ model AdminUser {
   isActive      Boolean          @default(true)
   villages      Village[]        @relation("AdminVillages")
   movements     MovementRecord[]
+  notifications Notification[]
+  groups        RecipientGroup[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
@@ -101,19 +125,24 @@ model Household {
 }
 
 model Member {
-  id            String       @id @default(cuid())
-  hoTen         String
-  ngaySinh      DateTime?
-  gioiTinh      Gender
-  cccd          String?      @unique
-  sdt           String?
-  quanHeChuHo   String
-  laChuHo       Boolean      @default(false)
-  trangThai     MemberStatus @default(ACTIVE)
-  household     Household    @relation(fields: [householdId], references: [id])
-  householdId   String
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String                 @id @default(cuid())
+  hoTen           String
+  ngaySinh        DateTime?
+  gioiTinh        Gender
+  cccd            String?                @unique
+  sdt             String?
+  email           String?
+  zaloUserId      String?
+  quanHeChuHo     String
+  laChuHo         Boolean                @default(false)
+  trangThai       MemberStatus           @default(ACTIVE)
+  household       Household              @relation(fields: [householdId], references: [id])
+  householdId     String
+  groupMembers    RecipientGroupMember[]
+  notifRecipients NotificationRecipient[]
+  notifSends      NotificationSend[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   @@index([householdId])
   @@index([cccd])
@@ -151,4 +180,145 @@ model HouseholdRelation {
   @@index([sourceId])
   @@index([targetId])
   @@map("household_relations")
+}
+
+// ─── NOTIFICATION MODULE ──────────────────────────────────
+
+model RecipientGroup {
+  id         String                 @id @default(cuid())
+  ten        String
+  moTa       String?
+  loai       String                 @default("MANUAL")
+  tieuChi    Json?
+  createdBy  String
+  admin      AdminUser              @relation(fields: [createdBy], references: [id])
+  members    RecipientGroupMember[]
+  recipients NotificationRecipient[]
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  @@map("recipient_groups")
+}
+
+model RecipientGroupMember {
+  groupId  String
+  memberId String
+  group    RecipientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member   Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, memberId])
+  @@map("recipient_group_members")
+}
+
+model Notification {
+  id          String                  @id @default(cuid())
+  tieuDe      String
+  noiDung     String
+  trangThai   NotifStatus             @default(NHAP)
+  kenhGui     String[]
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdBy   String
+  admin       AdminUser               @relation(fields: [createdBy], references: [id])
+  recipients  NotificationRecipient[]
+  attachments NotificationAttachment[]
+  sends       NotificationSend[]
+  surveys     Survey[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([trangThai])
+  @@index([scheduledAt])
+  @@map("notifications")
+}
+
+model NotificationRecipient {
+  id             String          @id @default(cuid())
+  notificationId String
+  memberId       String?
+  groupId        String?
+  notification   Notification    @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  member         Member?         @relation(fields: [memberId], references: [id])
+  group          RecipientGroup? @relation(fields: [groupId], references: [id])
+
+  @@map("notification_recipients")
+}
+
+model NotificationAttachment {
+  id             String       @id @default(cuid())
+  notificationId String
+  tenFile        String
+  url            String
+  loai           String       @default("OTHER")
+  sizeByte       Int          @default(0)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@map("notification_attachments")
+}
+
+model NotificationSend {
+  id             String               @id @default(cuid())
+  notificationId String
+  memberId       String
+  kenh           String
+  trangThai      SendStatus           @default(PENDING)
+  errorMsg       String?
+  sentAt         DateTime?
+  readAt         DateTime?
+  notification   Notification         @relation(fields: [notificationId], references: [id])
+  member         Member               @relation(fields: [memberId], references: [id])
+  feedbacks      NotificationFeedback[]
+  createdAt      DateTime             @default(now())
+
+  @@index([notificationId])
+  @@index([memberId])
+  @@map("notification_sends")
+}
+
+model NotificationFeedback {
+  id        String           @id @default(cuid())
+  sendId    String
+  noiDung   String
+  nguon     String           @default("ADMIN")
+  createdAt DateTime         @default(now())
+  send      NotificationSend @relation(fields: [sendId], references: [id], onDelete: Cascade)
+
+  @@map("notification_feedbacks")
+}
+
+model Survey {
+  id             String           @id @default(cuid())
+  tieuDe         String
+  notificationId String?
+  deadline       DateTime?
+  isActive       Boolean          @default(true)
+  notification   Notification?    @relation(fields: [notificationId], references: [id])
+  questions      SurveyQuestion[]
+  responses      SurveyResponse[]
+  createdAt      DateTime         @default(now())
+
+  @@map("surveys")
+}
+
+model SurveyQuestion {
+  id       String      @id @default(cuid())
+  surveyId String
+  thuTu    Int         @default(0)
+  cauHoi   String
+  loai     SurveyQType @default(SINGLE)
+  luaChon  String[]
+  survey   Survey      @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@map("survey_questions")
+}
+
+model SurveyResponse {
+  id        String   @id @default(cuid())
+  surveyId  String
+  memberId  String?
+  answers   Json
+  createdAt DateTime @default(now())
+  survey    Survey   @relation(fields: [surveyId], references: [id])
+
+  @@map("survey_responses")
 }

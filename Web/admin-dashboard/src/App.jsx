@@ -11,6 +11,10 @@ import NhanSu from './pages/NhanSu'
 import BaoCao from './pages/BaoCao'
 import CaiDat from './pages/CaiDat'
 import ThonXom from './pages/ThonXom'
+import ThongBao from './pages/ThongBao'
+import NguoiNhan from './pages/NguoiNhan'
+import KhaoSat from './pages/KhaoSat'
+import BaoCaoThongBao from './pages/BaoCaoThongBao'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -39,6 +43,10 @@ function AppRoutes() {
         <Route path="nhan-su"  element={<NhanSu />} />
         <Route path="bao-cao"  element={<BaoCao />} />
         <Route path="cai-dat"  element={<CaiDat />} />
+        <Route path="thong-bao"      element={<ThongBao />} />
+        <Route path="nguoi-nhan"     element={<NguoiNhan />} />
+        <Route path="khao-sat"       element={<KhaoSat />} />
+        <Route path="bao-cao-tb"     element={<BaoCaoThongBao />} />
       </Route>
     </Routes>
   )

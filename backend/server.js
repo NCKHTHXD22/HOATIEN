@@ -4,21 +4,26 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 
+const path = require("path");
 const env = require("./src/config/env");
 const { connectDatabases, disconnectDatabases } = require("./src/config/database");
 const routes = require("./src/routes/index");
 const { errorHandler, notFoundHandler } = require("./src/middlewares/error.middleware");
 const { startSyncJob } = require("./src/jobs/syncSearchIndex");
+const { startScheduledNotificationsJob } = require("./src/jobs/scheduledNotifications");
 const logger = require("./src/utils/logger");
 
 const app = express();
 
 // ─── Middlewares ──────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(env.isDev ? "dev" : "combined"));
+
+// Phục vụ file upload tĩnh
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ─── Health check ─────────────────────────────────────────
 app.get("/health", (req, res) => {
@@ -45,6 +50,8 @@ async function start() {
     logger.info(`Server running on port ${env.PORT} [${env.NODE_ENV}]`);
     logger.info(`Health: http://localhost:${env.PORT}/health`);
   });
+
+  startScheduledNotificationsJob();
 
   if (env.NODE_ENV === "production") {
     startSyncJob();

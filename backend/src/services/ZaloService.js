@@ -113,4 +113,9 @@ async function _sendZaloMessage(toUserId, text) {
   }
 }
 
-module.exports = { handleMessage };
+async function sendMessage(zaloUserId, text) {
+  if (!env.ZALO_OA_ACCESS_TOKEN) throw new Error("Zalo OA chưa được cấu hình");
+  await _sendZaloMessage(zaloUserId, text);
+}
+
+module.exports = { handleMessage, sendMessage };

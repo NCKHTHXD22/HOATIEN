@@ -25,6 +25,13 @@ module.exports = {
   ZALO_OA_ACCESS_TOKEN: process.env.ZALO_OA_ACCESS_TOKEN,
   ZALO_WEBHOOK_SECRET: process.env.ZALO_WEBHOOK_SECRET,
 
+  SMTP_USER: process.env.SMTP_USER,
+  SMTP_PASS: process.env.SMTP_PASS,
+
+  ESMS_API_KEY: process.env.ESMS_API_KEY,
+  ESMS_SECRET_KEY: process.env.ESMS_SECRET_KEY,
+  ESMS_BRANDNAME: process.env.ESMS_BRANDNAME || "HOATIEN",
+
   CORS_ORIGINS: (process.env.CORS_ORIGINS || "http://localhost:5173")
     .split(",")
     .map((s) => s.trim()),

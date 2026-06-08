@@ -7,5 +7,6 @@ router.use("/members",    require("./member.routes"));
 router.use("/movements",  require("./movement.routes"));
 router.use("/reports",    require("./report.routes"));
 router.use("/zalo",       require("./zalo.routes"));
+router.use("/notify",     require("./notification.routes"));
 
 module.exports = router;
