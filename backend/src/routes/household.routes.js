@@ -30,6 +30,25 @@ router.get("/search", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/households/merge
+router.post(
+  "/merge",
+  requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"),
+  [
+    body("targetId").notEmpty().withMessage("Hộ nhận (targetId) là bắt buộc"),
+    body("sourceIds").isArray({ min: 1 }).withMessage("Cần chọn ít nhất 1 hộ nguồn để gộp"),
+    body("sourceIds.*").isString().withMessage("sourceIds phải là mảng chuỗi ID"),
+    body("ghiChu").optional().isString(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const result = await HouseholdService.mergeHouseholds(req.body, req.user.id);
+      ok(res, result, `Gộp ${result.mergedCount} hộ thành công, chuyển ${result.membersMoved} nhân khẩu`);
+    } catch (err) { next(err); }
+  }
+);
+
 // GET /api/households/:id
 router.get("/:id", async (req, res, next) => {
   try { ok(res, await HouseholdService.getById(req.params.id)); } catch (err) { next(err); }

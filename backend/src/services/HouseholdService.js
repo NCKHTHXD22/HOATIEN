@@ -103,4 +103,115 @@ async function splitHousehold({ sourceId, memberIds, newHeadId, newDiaChi, newVi
   return { source: updatedSource, newHousehold: updatedNew };
 }
 
-module.exports = { getAll, getById, create, update, remove, splitHousehold };
+async function mergeHouseholds({ targetId, sourceIds, ghiChu }, performedBy) {
+  // Validate hộ nhận
+  const target = await HouseholdRepo.findById(targetId);
+  if (!target) throw new Error("Không tìm thấy hộ nhận");
+  if (target.trangThai === "DA_GIAI_THE") throw new Error("Hộ nhận đã giải thể, không thể gộp vào");
+
+  // Không cho trùng target và source
+  const uniqueSources = [...new Set(sourceIds)].filter((id) => id !== targetId);
+  if (uniqueSources.length === 0) throw new Error("Hộ nguồn không thể trùng với hộ nhận");
+
+  // Load tất cả hộ nguồn
+  const sources = await Promise.all(uniqueSources.map((id) => HouseholdRepo.findById(id)));
+  const missing = sources.findIndex((s) => !s);
+  if (missing !== -1) throw new Error(`Không tìm thấy hộ nguồn: ${uniqueSources[missing]}`);
+
+  const movedMemberIds = [];
+
+  await prisma.$transaction(async (tx) => {
+    for (const source of sources) {
+      const activeMemberIds = (source.members || [])
+        .filter((m) => m.trangThai === "ACTIVE")
+        .map((m) => m.id);
+
+      // Chuyển thành viên sang hộ nhận, bỏ flag chủ hộ cũ
+      if (activeMemberIds.length > 0) {
+        await tx.member.updateMany({
+          where: { id: { in: activeMemberIds } },
+          data: { householdId: targetId, laChuHo: false },
+        });
+        movedMemberIds.push(...activeMemberIds);
+      }
+
+      // Chỉ đánh DA_GIAI_THE nếu hộ đang ACTIVE
+      if (source.trangThai === "ACTIVE") {
+        await tx.household.update({
+          where: { id: source.id },
+          data: { trangThai: "DA_GIAI_THE" },
+        });
+      }
+
+      // Ghi lịch sử quan hệ gộp hộ
+      await tx.householdRelation.create({
+        data: {
+          type: "MERGE",
+          sourceId: source.id,
+          targetId,
+          memberIds: activeMemberIds,
+          note: ghiChu || `Gộp hộ ${source.soHoKhau} vào ${target.soHoKhau}`,
+        },
+      });
+
+      // Ghi biến động MOVE_IN cho hộ nhận
+      if (activeMemberIds.length > 0) {
+        const isDiffVillage = source.villageId !== target.villageId;
+        await tx.movementRecord.create({
+          data: {
+            householdId: targetId,
+            loai: "MOVE_IN",
+            ngay: new Date(),
+            nguonGoc: isDiffVillage
+              ? `${source.soHoKhau} (${source.village?.ten || "thôn khác"})`
+              : source.soHoKhau,
+            ghiChu: [
+              `Gộp hộ từ ${source.soHoKhau}`,
+              isDiffVillage ? "(khác thôn)" : null,
+              ghiChu || null,
+            ]
+              .filter(Boolean)
+              .join(" — "),
+            performedById: performedBy,
+          },
+        });
+      }
+    }
+  });
+
+  // Audit log sau transaction
+  const updatedTarget = await HouseholdRepo.findById(targetId);
+  const sourceList = sources.map((s) => s.soHoKhau).join(", ");
+
+  for (const source of sources) {
+    AuditService.log({
+      entityType: "household",
+      entityId: source.id,
+      action: "MERGE",
+      oldData: source,
+      newData: { trangThai: "DA_GIAI_THE", mergedIntoId: targetId, mergedInto: target.soHoKhau },
+      performedBy,
+      note: `Gộp vào hộ ${target.soHoKhau}${ghiChu ? " — " + ghiChu : ""}`,
+    });
+    SearchService.syncIndex(source.id).catch(() => {});
+  }
+
+  AuditService.log({
+    entityType: "household",
+    entityId: targetId,
+    action: "MERGE",
+    oldData: target,
+    newData: updatedTarget,
+    performedBy,
+    note: `Nhận gộp từ: ${sourceList}${ghiChu ? " — " + ghiChu : ""}`,
+  });
+  SearchService.syncIndex(targetId).catch(() => {});
+
+  return {
+    target: updatedTarget,
+    mergedCount: sources.length,
+    membersMoved: movedMemberIds.length,
+  };
+}
+
+module.exports = { getAll, getById, create, update, remove, splitHousehold, mergeHouseholds };
