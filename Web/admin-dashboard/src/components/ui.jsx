@@ -21,22 +21,24 @@ export function PageHeader({ title, subtitle, action }) {
   )
 }
 
-export function PrimaryBtn({ children, onClick }) {
+export function PrimaryBtn({ children, onClick, disabled }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm shadow-primary/25"
+      disabled={disabled}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm shadow-primary/25"
     >
       {children}
     </button>
   )
 }
 
-export function SecondaryBtn({ children, onClick }) {
+export function SecondaryBtn({ children, onClick, disabled }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-foreground bg-card border border-border hover:bg-secondary transition-colors shadow-sm"
+      disabled={disabled}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-foreground bg-card border border-border hover:bg-secondary disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm"
     >
       {children}
     </button>
