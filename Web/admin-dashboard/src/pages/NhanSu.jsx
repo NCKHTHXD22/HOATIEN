@@ -1,6 +1,6 @@
 import '../styles/nhan-su.css'
 import { useState, useEffect } from 'react'
-import { Plus, Filter, Users, UserCheck, UserX, Eye, EyeOff, Pencil, Lock, Unlock } from 'lucide-react'
+import { Plus, Filter, Users, UserCheck, UserX, Eye, EyeOff, Pencil, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { PageHeader, PrimaryBtn, SecondaryBtn, DataTable, Tabs, SearchInput, StatCard, Badge, Modal, Select, FormInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import * as authService from '../services/authService'
@@ -17,7 +17,7 @@ const ROLE_OPTIONS = [
   { value: 'VIEWER',        label: 'Chỉ xem (Viewer)' },
 ]
 
-const COLUMNS = ['Họ tên', 'Tên đăng nhập', 'Phân quyền', 'Trạng thái', 'Ngày tạo', '']
+const COLUMNS = ['Họ tên', 'Tên đăng nhập', 'Phân quyền', 'Trạng thái', 'Gửi TB', 'Ngày tạo', '']
 
 const EMPTY_FORM = { hoTen: '', username: '', password: '', role: 'VIEWER' }
 
@@ -36,6 +36,16 @@ export default function NhanSu() {
   const [showPwd, setShowPwd] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  const handleToggleNotify = async (u) => {
+    const next = !u.canSendNotification
+    try {
+      await authService.updateNotifyPermission(u.id, next)
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, canSendNotification: next } : x))
+    } catch (e) {
+      alert(e.response?.data?.message || 'Cập nhật quyền thất bại')
+    }
+  }
 
   const loadUsers = () => {
     if (!isSuperAdmin) { setLoading(false); return }
@@ -146,6 +156,26 @@ export default function NhanSu() {
                       <Badge variant={u.isActive ? 'green' : 'red'}>
                         {u.isActive ? 'Hoạt động' : 'Bị khóa'}
                       </Badge>
+                    </td>
+                    <td className="px-5 py-3">
+                      {u.role === 'SUPER_ADMIN' ? (
+                        <span className="text-xs text-muted-foreground">Luôn có</span>
+                      ) : u.role === 'VIEWER' ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleNotify(u)}
+                          title={u.canSendNotification ? 'Thu hồi quyền gửi' : 'Cấp quyền gửi'}
+                          className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            u.canSendNotification
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-red-100 text-red-600 hover:bg-red-200'
+                          }`}
+                        >
+                          {u.canSendNotification ? <Bell size={11} /> : <BellOff size={11} />}
+                          {u.canSendNotification ? 'Có quyền' : 'Không có'}
+                        </button>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-xs text-muted-foreground">
                       {new Date(u.createdAt).toLocaleDateString('vi-VN')}

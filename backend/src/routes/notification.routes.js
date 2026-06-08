@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const path = require("path");
 const multer = require("multer");
-const { authenticate, requireRole } = require("../middlewares/auth.middleware");
+const { authenticate, requireRole, requireSendPermission } = require("../middlewares/auth.middleware");
 const { ok, created, fail, notFound, paginated } = require("../utils/response");
 const NotificationRepo = require("../repositories/pg/NotificationRepo");
 const RecipientGroupRepo = require("../repositories/pg/RecipientGroupRepo");
@@ -128,7 +128,7 @@ router.delete("/notifications/:id", authenticate, requireRole(...SENDER_ROLES), 
 });
 
 // POST /api/notify/notifications/:id/send  — gửi ngay
-router.post("/notifications/:id/send", authenticate, requireRole(...SENDER_ROLES), async (req, res, next) => {
+router.post("/notifications/:id/send", authenticate, requireSendPermission(), async (req, res, next) => {
   try {
     await NotificationService.execute(req.params.id);
     ok(res, null, "Đã gửi thông báo");
@@ -136,7 +136,7 @@ router.post("/notifications/:id/send", authenticate, requireRole(...SENDER_ROLES
 });
 
 // POST /api/notify/notifications/:id/schedule  — lên lịch
-router.post("/notifications/:id/schedule", authenticate, requireRole(...SENDER_ROLES), async (req, res, next) => {
+router.post("/notifications/:id/schedule", authenticate, requireSendPermission(), async (req, res, next) => {
   try {
     const { scheduledAt } = req.body;
     if (!scheduledAt) return fail(res, "Cần cung cấp thời gian gửi");
@@ -156,7 +156,7 @@ router.post("/notifications/:id/schedule", authenticate, requireRole(...SENDER_R
 });
 
 // POST /api/notify/notifications/:id/cancel  — hủy lịch
-router.post("/notifications/:id/cancel", authenticate, requireRole(...SENDER_ROLES), async (req, res, next) => {
+router.post("/notifications/:id/cancel", authenticate, requireSendPermission(), async (req, res, next) => {
   try {
     const notif = await NotificationRepo.findById(req.params.id);
     if (!notif) return notFound(res);

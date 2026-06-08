@@ -87,19 +87,20 @@ model Village {
 }
 
 model AdminUser {
-  id            String           @id @default(cuid())
-  username      String           @unique
-  passwordHash  String
-  hoTen         String
-  role          AdminRole        @default(ADMIN_VILLAGE)
-  zaloUserId    String?          @unique
-  isActive      Boolean          @default(true)
-  villages      Village[]        @relation("AdminVillages")
-  movements     MovementRecord[]
-  notifications Notification[]
-  groups        RecipientGroup[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id                  String           @id @default(cuid())
+  username            String           @unique
+  passwordHash        String
+  hoTen               String
+  role                AdminRole        @default(ADMIN_VILLAGE)
+  zaloUserId          String?          @unique
+  isActive            Boolean          @default(true)
+  canSendNotification Boolean          @default(true)
+  villages            Village[]        @relation("AdminVillages")
+  movements           MovementRecord[]
+  notifications       Notification[]
+  groups              RecipientGroup[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@map("admin_users")
 }

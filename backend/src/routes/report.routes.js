@@ -1,8 +1,9 @@
 const router = require("express").Router();
 const ReportService = require("../services/ReportService");
+const ExportService = require("../services/ExportService");
 const ReportCacheRepo = require("../repositories/mongo/ReportCacheRepo");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
-const { ok } = require("../utils/response");
+const { ok, fail } = require("../utils/response");
 
 router.use(authenticate);
 
@@ -19,6 +20,16 @@ router.get("/by-village", async (req, res, next) => {
 // GET /api/reports/movements?fromDate=&toDate=
 router.get("/movements", async (req, res, next) => {
   try { ok(res, await ReportService.getMovementStats(req.query)); } catch (err) { next(err); }
+});
+
+// GET /api/reports/export/excel
+router.get("/export/excel", async (req, res, next) => {
+  try { await ExportService.buildExcelReport(res); } catch (err) { next(err); }
+});
+
+// GET /api/reports/export/pdf
+router.get("/export/pdf", async (req, res, next) => {
+  try { await ExportService.buildPdfReport(res); } catch (err) { next(err); }
 });
 
 // DELETE /api/reports/cache  (flush cache — SUPER_ADMIN only)

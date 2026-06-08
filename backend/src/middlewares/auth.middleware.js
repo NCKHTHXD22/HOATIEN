@@ -22,4 +22,14 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { authenticate, requireRole };
+// SUPER_ADMIN luôn có quyền; ADMIN_VILLAGE cần canSendNotification=true; VIEWER không bao giờ
+function requireSendPermission() {
+  return (req, res, next) => {
+    if (!req.user) return unauthorized(res);
+    if (req.user.role === "SUPER_ADMIN") return next();
+    if (req.user.role === "ADMIN_VILLAGE" && req.user.canSendNotification) return next();
+    return forbidden(res, "Tài khoản chưa được cấp quyền gửi thông báo");
+  };
+}
+
+module.exports = { authenticate, requireRole, requireSendPermission };

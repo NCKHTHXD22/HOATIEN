@@ -8,6 +8,10 @@ import * as reportService from '../services/reportService'
 function downloadCsv(rows, filename) {
   const csv = rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  triggerDownload(blob, filename)
+}
+
+function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()
@@ -21,6 +25,7 @@ export default function BaoCao() {
   const [byVillage, setByVillage]   = useState([])
   const [movStats, setMovStats]     = useState(null)
   const [loading, setLoading]       = useState(true)
+  const [exporting, setExporting]   = useState('')  // 'excel' | 'pdf' | ''
 
   const load = async () => {
     setLoading(true)
@@ -37,6 +42,32 @@ export default function BaoCao() {
       console.error('BaoCao load error:', e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleExportExcel = async () => {
+    setExporting('excel')
+    try {
+      const res = await reportService.exportExcel()
+      const date = new Date().toISOString().slice(0, 10)
+      triggerDownload(new Blob([res.data], { type: res.headers['content-type'] }), `bao-cao-hoa-tien-${date}.xlsx`)
+    } catch (e) {
+      alert('Xuất Excel thất bại: ' + (e.response?.data?.message || e.message))
+    } finally {
+      setExporting('')
+    }
+  }
+
+  const handleExportPdf = async () => {
+    setExporting('pdf')
+    try {
+      const res = await reportService.exportPdf()
+      const date = new Date().toISOString().slice(0, 10)
+      triggerDownload(new Blob([res.data], { type: 'application/pdf' }), `bao-cao-hoa-tien-${date}.pdf`)
+    } catch (e) {
+      alert('Xuất PDF thất bại: ' + (e.response?.data?.message || e.message))
+    } finally {
+      setExporting('')
     }
   }
 
@@ -117,7 +148,30 @@ export default function BaoCao() {
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
-            <PrimaryBtn onClick={exportTongHop} disabled={loading}><Download size={14} /> Xuất báo cáo tổng hợp</PrimaryBtn>
+            <button
+              onClick={exportTongHop}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-sm text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+              title="Xuất CSV"
+            >
+              <FileText size={14} /> CSV
+            </button>
+            <button
+              onClick={handleExportExcel}
+              disabled={loading || exporting !== ''}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm transition-colors disabled:opacity-50"
+              title="Xuất Excel (.xlsx)"
+            >
+              <Download size={14} /> {exporting === 'excel' ? 'Đang xuất...' : 'Excel'}
+            </button>
+            <button
+              onClick={handleExportPdf}
+              disabled={loading || exporting !== ''}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm transition-colors disabled:opacity-50"
+              title="Xuất PDF"
+            >
+              <Download size={14} /> {exporting === 'pdf' ? 'Đang xuất...' : 'PDF'}
+            </button>
           </div>
         }
       />

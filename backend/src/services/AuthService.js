@@ -11,7 +11,7 @@ async function login(username, password) {
   if (!valid) throw new Error("Mật khẩu không đúng");
 
   const token = jwt.sign(
-    { id: user.id, username: user.username, role: user.role },
+    { id: user.id, username: user.username, role: user.role, canSendNotification: user.canSendNotification },
     env.JWT_SECRET,
     { expiresIn: env.JWT_EXPIRES_IN }
   );

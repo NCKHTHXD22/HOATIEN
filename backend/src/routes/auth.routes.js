@@ -54,6 +54,25 @@ router.get("/users", authenticate, requireRole("SUPER_ADMIN"), async (req, res, 
   } catch (err) { next(err); }
 });
 
+// PUT /api/auth/users/:id/notify-permission  (chỉ SUPER_ADMIN)
+router.put(
+  "/users/:id/notify-permission",
+  authenticate,
+  requireRole("SUPER_ADMIN"),
+  async (req, res, next) => {
+    try {
+      const { canSendNotification } = req.body;
+      if (typeof canSendNotification !== "boolean") {
+        return fail(res, "canSendNotification phải là true hoặc false");
+      }
+      const updated = await AdminUserRepo.update(req.params.id, { canSendNotification });
+      const { passwordHash: _, ...safeUser } = updated;
+      const msg = canSendNotification ? "Đã cấp quyền gửi thông báo" : "Đã thu hồi quyền gửi thông báo";
+      ok(res, safeUser, msg);
+    } catch (err) { next(err); }
+  }
+);
+
 // PUT /api/auth/change-password
 router.put(
   "/change-password",
