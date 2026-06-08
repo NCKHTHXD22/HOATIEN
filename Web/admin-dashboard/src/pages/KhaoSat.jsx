@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  ClipboardList, Plus, Trash2, RefreshCw, Eye, X,
+  ClipboardList, Plus, Trash2, RefreshCw, X,
   PlusCircle, MinusCircle, BarChart3,
 } from 'lucide-react'
 import { getSurveys, createSurvey, deleteSurvey, getSurveyResults } from '../services/notificationService'

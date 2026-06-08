@@ -1,6 +1,5 @@
 const { prisma } = require("../config/database");
 const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
-const MemberRepo = require("../repositories/pg/MemberRepo");
 const AuditService = require("./AuditService");
 const SearchService = require("./SearchService");
 const { computeDiff } = require("../utils/diff");

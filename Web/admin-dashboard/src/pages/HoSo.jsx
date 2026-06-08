@@ -107,7 +107,7 @@ export default function HoSo() {
         householdService.getAll({ page: 1, limit: 1, loaiHo: 'TAM_VANG' }),
       ])
       setStats({ all: all.data.pagination.total, thuongTru: tt.data.pagination.total, tamTru: tr.data.pagination.total, tamVang: tv.data.pagination.total })
-    } catch {}
+    } catch { /* ignore */ }
   }, [])
 
   const loadList = useCallback(async (t, s, p) => {
@@ -123,10 +123,11 @@ export default function HoSo() {
         setHH(res.data.data || [])
         setPag(res.data.pagination || { total: 0, totalPages: 1 })
       }
-    } catch {} finally { setLoading(false) }
+    } catch { /* ignore */ } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { loadStats() }, [loadStats])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadList(tab, search, page) }, [tab, page])
   useEffect(() => {
     villageService.getAll().then(r => setVillages(r.data.data || [])).catch(() => {})
@@ -184,7 +185,7 @@ export default function HoSo() {
       setDetailHH(full.data.data || h)
       setMovements(mov.data.data || [])
       setHistory(hist.data.data || [])
-    } catch {} finally { setDL(false) }
+    } catch { /* ignore */ } finally { setDL(false) }
   }
   const reloadDetail = async () => {
     if (!detailHH) return
@@ -198,7 +199,7 @@ export default function HoSo() {
       setDetailHH(full.data.data)
       setMovements(mov.data.data || [])
       setHistory(hist.data.data || [])
-    } catch {} finally { setDL(false) }
+    } catch { /* ignore */ } finally { setDL(false) }
   }
 
   /* ── Member CRUD (UC04) ── */
@@ -256,7 +257,7 @@ export default function HoSo() {
     try {
       const res = await householdService.getAll({ limit: 500 })
       setMergeAll(res.data.data || [])
-    } catch {} finally { setMergeLoading(false) }
+    } catch { /* ignore */ } finally { setMergeLoading(false) }
   }
   const toggleMergeSource = id => setMergeSources(s => {
     const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n

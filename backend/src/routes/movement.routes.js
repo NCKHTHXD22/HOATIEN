@@ -3,7 +3,7 @@ const { body } = require("express-validator");
 const MovementService = require("../services/MovementService");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 const { validate } = require("../middlewares/validate.middleware");
-const { ok, created, paginated } = require("../utils/response");
+const { created, paginated } = require("../utils/response");
 
 router.use(authenticate);
 

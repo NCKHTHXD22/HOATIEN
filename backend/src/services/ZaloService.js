@@ -6,7 +6,6 @@ const SearchService = require("./SearchService");
 const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
 const MemberRepo = require("../repositories/pg/MemberRepo");
 const { formatZaloReply } = require("../utils/zaloFormat");
-const env = require("../config/env");
 const logger = require("../utils/logger");
 
 const MENU_TEXT =

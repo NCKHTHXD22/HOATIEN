@@ -1,7 +1,7 @@
 const logger = require("../utils/logger");
 const { serverError, fail } = require("../utils/response");
 
-function errorHandler(err, req, res, next) {
+function errorHandler(err, req, res, _next) {
   logger.error(`${req.method} ${req.path} — ${err.message}`, { stack: err.stack });
 
   if (err.code === "P2025") return fail(res, "Không tìm thấy dữ liệu", 404);

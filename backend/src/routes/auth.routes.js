@@ -11,7 +11,7 @@ router.post(
   "/login",
   [body("username").notEmpty(), body("password").notEmpty()],
   validate,
-  async (req, res, next) => {
+  async (req, res) => {
     try {
       const result = await AuthService.login(req.body.username, req.body.password);
       ok(res, result, "Đăng nhập thành công");
@@ -36,7 +36,7 @@ router.post(
     body("role").isIn(["SUPER_ADMIN", "ADMIN_VILLAGE", "VIEWER"]),
   ],
   validate,
-  async (req, res, next) => {
+  async (req, res) => {
     try {
       const user = await AuthService.createUser(req.body);
       created(res, user, "Tạo tài khoản thành công");
@@ -79,7 +79,7 @@ router.put(
   authenticate,
   [body("oldPassword").notEmpty(), body("newPassword").isLength({ min: 6 })],
   validate,
-  async (req, res, next) => {
+  async (req, res) => {
     try {
       await AuthService.changePassword(req.user.id, req.body.oldPassword, req.body.newPassword);
       ok(res, null, "Đổi mật khẩu thành công");

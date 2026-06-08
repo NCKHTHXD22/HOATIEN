@@ -1,17 +1,15 @@
 const router = require("express").Router();
-const crypto = require("crypto");
 const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
-const env = require("../config/env");
 const logger = require("../utils/logger");
 
 // POST /api/zalo/webhook  — Zalo gọi vào đây
 router.post("/webhook", async (req, res) => {
   try {
-    const { app_id, user_id_by_app, message } = req.body;
+    const { user_id_by_app, message } = req.body;
 
     if (!user_id_by_app || !message?.text) {
       return res.status(200).json({ error: 0 });

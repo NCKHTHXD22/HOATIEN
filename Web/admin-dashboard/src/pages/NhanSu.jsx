@@ -55,6 +55,7 @@ export default function NhanSu() {
       .finally(() => setLoading(false))
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadUsers() }, [isSuperAdmin])
 
   const filtered = users.filter(u => {

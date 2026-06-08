@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Send, Plus, Eye, Trash2, Clock, CheckCircle2, XCircle,
-  Search, RefreshCw, MessageSquare, Mail, Phone, Paperclip,
-  ChevronDown, ChevronUp, X,
+  Send, Plus, Eye, Trash2, CheckCircle2, XCircle,
+  Search, RefreshCw, MessageSquare, Mail, Phone, X,
 } from 'lucide-react'
 import {
   getNotifications, createNotification, sendNotification, deleteNotification,
@@ -47,7 +46,7 @@ function ComposeModal({ open, onClose, onDone }) {
   const [scheduleMode, setScheduleMode] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
   const [files, setFiles] = useState([])
-  const [savedId, setSavedId] = useState(null)
+  const [_savedId, setSavedId] = useState(null)
   const [tab, setTab] = useState('nhom') // 'nhom' | 'canhan'
 
   useEffect(() => {

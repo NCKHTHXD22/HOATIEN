@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Users, Plus, Trash2, RefreshCw, Search, X, ChevronRight,
-  UserPlus, Settings2, CheckCircle2,
+  UserPlus,
 } from 'lucide-react'
 import {
   getGroups, createGroup, deleteGroup, getGroup,
   addGroupMembers, removeGroupMembers, rebuildAutoGroup,
   getMembers,
 } from '../services/notificationService'
-
-const VILLAGE_FILTER = '' // mở rộng sau nếu cần
 
 function fmtDate(d) {
   if (!d) return '—'

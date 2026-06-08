@@ -3,7 +3,7 @@ const ReportService = require("../services/ReportService");
 const ExportService = require("../services/ExportService");
 const ReportCacheRepo = require("../repositories/mongo/ReportCacheRepo");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
-const { ok, fail } = require("../utils/response");
+const { ok } = require("../utils/response");
 
 router.use(authenticate);
 

@@ -1,9 +1,9 @@
 const router = require("express").Router();
-const { body, param } = require("express-validator");
+const { body } = require("express-validator");
 const VillageService = require("../services/VillageService");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 const { validate } = require("../middlewares/validate.middleware");
-const { ok, created, fail } = require("../utils/response");
+const { ok, created } = require("../utils/response");
 
 router.use(authenticate);
 

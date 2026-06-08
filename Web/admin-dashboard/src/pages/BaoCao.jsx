@@ -1,7 +1,7 @@
 import '../styles/bao-cao.css'
 import { useEffect, useState } from 'react'
 import { Download, BarChart3, TrendingUp, FileText, Calendar, Users, Home, MapPin, RefreshCw } from 'lucide-react'
-import { PageHeader, PrimaryBtn, StatCard } from '../components/ui'
+import { PageHeader, StatCard } from '../components/ui'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts'
 import * as reportService from '../services/reportService'
 
