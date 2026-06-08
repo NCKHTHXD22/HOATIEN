@@ -11,6 +11,8 @@ const routes = require("./src/routes/index");
 const { errorHandler, notFoundHandler } = require("./src/middlewares/error.middleware");
 const { startSyncJob } = require("./src/jobs/syncSearchIndex");
 const { startScheduledNotificationsJob } = require("./src/jobs/scheduledNotifications");
+const { startZaloTokenRefreshJob } = require("./src/jobs/zaloTokenRefresh");
+const ZaloConfigRepo = require("./src/repositories/mongo/ZaloConfigRepo");
 const logger = require("./src/utils/logger");
 
 const app = express();
@@ -52,6 +54,12 @@ async function start() {
   });
 
   startScheduledNotificationsJob();
+  startZaloTokenRefreshJob();
+
+  // Khởi tạo Zalo token từ .env vào MongoDB (chỉ lần đầu nếu chưa có)
+  ZaloConfigRepo.initFromEnv().catch((err) =>
+    logger.warn(`Zalo token init: ${err.message}`)
+  );
 
   if (env.NODE_ENV === "production") {
     startSyncJob();

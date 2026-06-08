@@ -1,5 +1,6 @@
 const axios = require("axios").default;
 const ZaloSessionRepo = require("../repositories/mongo/ZaloSessionRepo");
+const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const SearchService = require("./SearchService");
 const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
@@ -63,8 +64,9 @@ async function handleMessage(zaloUserId, text) {
 
   ZaloEvent.create({ type: "SEARCH", zaloUserId, query, resultCount: results.length }).catch(() => {});
 
-  if (env.ZALO_OA_ACCESS_TOKEN && replyText) {
-    await _sendZaloMessage(zaloUserId, replyText);
+  const token = await ZaloConfigRepo.getValidToken();
+  if (token && replyText) {
+    await _sendZaloMessage(zaloUserId, replyText, token);
   }
 
   return replyText;
@@ -101,12 +103,12 @@ async function _pgLikeFallback(name) {
   });
 }
 
-async function _sendZaloMessage(toUserId, text) {
+async function _sendZaloMessage(toUserId, text, token) {
   try {
     await axios.post(
-      "https://openapi.zalo.me/v2.0/oa/message",
+      "https://openapi.zalo.me/v3.0/oa/message/cs",
       { recipient: { user_id: toUserId }, message: { text } },
-      { headers: { access_token: env.ZALO_OA_ACCESS_TOKEN } }
+      { headers: { access_token: token } }
     );
   } catch (err) {
     logger.error(`Zalo send failed [${toUserId}]: ${err.message}`);
@@ -114,8 +116,9 @@ async function _sendZaloMessage(toUserId, text) {
 }
 
 async function sendMessage(zaloUserId, text) {
-  if (!env.ZALO_OA_ACCESS_TOKEN) throw new Error("Zalo OA chưa được cấu hình");
-  await _sendZaloMessage(zaloUserId, text);
+  const token = await ZaloConfigRepo.getValidToken();
+  if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
+  await _sendZaloMessage(zaloUserId, text, token);
 }
 
 module.exports = { handleMessage, sendMessage };

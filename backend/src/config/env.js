@@ -23,6 +23,7 @@ module.exports = {
   ZALO_APP_ID: process.env.ZALO_APP_ID,
   ZALO_APP_SECRET: process.env.ZALO_APP_SECRET,
   ZALO_OA_ACCESS_TOKEN: process.env.ZALO_OA_ACCESS_TOKEN,
+  ZALO_OA_REFRESH_TOKEN: process.env.ZALO_OA_REFRESH_TOKEN,
   ZALO_WEBHOOK_SECRET: process.env.ZALO_WEBHOOK_SECRET,
 
   SMTP_USER: process.env.SMTP_USER,
