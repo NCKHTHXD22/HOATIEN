@@ -3,6 +3,7 @@ const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
 const AuditService = require("./AuditService");
 const SearchService = require("./SearchService");
 const { computeDiff } = require("../utils/diff");
+const { normalizeMember } = require("../utils/normalize");
 
 async function getAll(filters) {
   const [data, total] = await HouseholdRepo.findAll(filters);
@@ -21,7 +22,7 @@ async function create({ soHoKhau, diaChi, lat, lng, trangThai, loaiHo, villageId
 
   const household = await HouseholdRepo.create(
     { soHoKhau, diaChi, lat, lng, trangThai, loaiHo, villageId },
-    members
+    members.map(normalizeMember)
   );
 
   AuditService.log({ entityType: "household", entityId: household.id, action: "CREATE", newData: household, performedBy });
