@@ -209,7 +209,14 @@ export default function HoSo() {
     if (!memForm.quanHeChuHo.trim())   { setMemErr('Vui lòng nhập quan hệ chủ hộ'); return }
     setMemSaving(true); setMemErr('')
     try {
-      await memberService.create({ ...memForm, householdId: detailHH.id })
+      const payload = {
+        ...memForm,
+        householdId: detailHH.id,
+        ngaySinh: memForm.ngaySinh ? new Date(memForm.ngaySinh).toISOString() : null,
+        cccd: memForm.cccd.trim() || null,
+        sdt: memForm.sdt.trim() || null,
+      }
+      await memberService.create(payload)
       setShowAddMem(false)
       await Promise.all([reloadDetail(), refresh()])
     } catch (e) { setMemErr(e.response?.data?.message || 'Thêm thất bại') }
