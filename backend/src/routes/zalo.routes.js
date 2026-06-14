@@ -1,9 +1,11 @@
 const router = require("express").Router();
+const axios = require("axios").default;
 const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
+const env = require("../config/env");
 const logger = require("../utils/logger");
 
 // POST /api/zalo/webhook  — Zalo gọi vào đây
@@ -54,19 +56,78 @@ router.post("/refresh-token", authenticate, requireRole("SUPER_ADMIN"), async (r
 // GET /api/zalo/token-status — kiểm tra trạng thái token (SUPER_ADMIN)
 router.get("/token-status", authenticate, requireRole("SUPER_ADMIN"), async (req, res, next) => {
   try {
-    const ZaloConfig = require("../models/mongo/ZaloConfig");
-    const doc = await ZaloConfig.findOne({ key: "oa_token" }).lean();
-    if (!doc) return ok(res, { configured: false, message: "Chưa có token nào được lưu" });
+    const redis = require("../config/redis");
+    const accessToken  = await redis.get("zalo_oa:access_token");
+    const refreshToken = await redis.get("zalo_oa:refresh_token");
+    const ttlSeconds   = await redis.ttl("zalo_oa:access_token");
+
+    if (!accessToken) {
+      return ok(res, { configured: false, message: "Chưa có token nào được lưu trong Redis" });
+    }
+
+    const daysLeft = ttlSeconds > 0 ? Math.floor(ttlSeconds / 86400) : null;
     ok(res, {
-      configured: !!doc.accessToken,
-      hasRefreshToken: !!doc.refreshToken,
-      expiresAt: doc.expiresAt,
-      daysLeft: doc.expiresAt
-        ? Math.max(0, Math.floor((new Date(doc.expiresAt) - Date.now()) / 86400000))
-        : null,
-      updatedAt: doc.updatedAt,
+      configured:      true,
+      hasRefreshToken: !!refreshToken,
+      daysLeft,
+      ttlSeconds: ttlSeconds > 0 ? ttlSeconds : null,
     });
   } catch (err) { next(err); }
+});
+
+// GET /api/zalo/auth-url — tạo URL để admin cấp quyền OA (SUPER_ADMIN)
+router.get("/auth-url", authenticate, requireRole("SUPER_ADMIN"), (req, res) => {
+  const redirectUri = encodeURIComponent(`${req.protocol}://${req.get("host")}/api/zalo/callback`);
+  const url = `https://oauth.zaloapp.com/v4/oa/permission?app_id=${env.ZALO_APP_ID}&redirect_uri=${redirectUri}`;
+  ok(res, { url }, "Mở URL này để cấp quyền cho OA");
+});
+
+// GET /api/zalo/callback — Zalo redirect về đây sau khi admin cấp quyền
+router.get("/callback", async (req, res) => {
+  const { code, oa_access_token, refresh_token } = req.query;
+
+  try {
+    // Zalo v4 OA: đôi khi trả thẳng token (không dùng code)
+    if (oa_access_token) {
+      await ZaloConfigRepo.saveTokens(oa_access_token, refresh_token || null);
+      logger.info("Zalo OA callback: token nhận trực tiếp, đã lưu Redis");
+      return res.send(`<h2 style="font-family:sans-serif;color:green">✓ Zalo OA đã kết nối thành công!</h2><p>Bạn có thể đóng tab này.</p>`);
+    }
+
+    // Đổi authorization code lấy token
+    if (!code) {
+      return res.status(400).send("<h2 style='color:red'>Thiếu code từ Zalo</h2>");
+    }
+
+    const redirectUri = `${req.protocol}://${req.get("host")}/api/zalo/callback`;
+    const { data } = await axios.post(
+      "https://oauth.zaloapp.com/v4/oa/access_token",
+      new URLSearchParams({
+        app_id:       env.ZALO_APP_ID,
+        grant_type:   "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          secret_key: env.ZALO_APP_SECRET,
+        },
+      }
+    );
+
+    if (!data.access_token) {
+      logger.error(`Zalo callback lỗi: ${JSON.stringify(data)}`);
+      return res.status(400).send(`<h2 style="color:red">Lỗi: ${data.message || "Không nhận được token"}</h2>`);
+    }
+
+    await ZaloConfigRepo.saveTokens(data.access_token, data.refresh_token || null);
+    logger.info("Zalo OA callback: đã đổi code lấy token thành công");
+    res.send(`<h2 style="font-family:sans-serif;color:green">✓ Zalo OA đã kết nối thành công!</h2><p>Bạn có thể đóng tab này.</p>`);
+  } catch (err) {
+    logger.error(`Zalo callback error: ${err.message}`);
+    res.status(500).send(`<h2 style="color:red">Lỗi server: ${err.message}</h2>`);
+  }
 });
 
 // GET /api/zalo/events — xem log sự kiện (admin)

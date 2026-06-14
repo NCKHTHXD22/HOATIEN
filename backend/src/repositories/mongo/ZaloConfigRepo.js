@@ -1,47 +1,50 @@
 const axios = require("axios").default;
-const ZaloConfig = require("../../models/mongo/ZaloConfig");
+const redis = require("../../config/redis");
 const env = require("../../config/env");
 const logger = require("../../utils/logger");
 
-const KEY = "oa_token";
-// Refresh trước khi hết hạn 3 ngày
-const REFRESH_BUFFER_MS = 3 * 24 * 60 * 60 * 1000;
-// Access token Zalo OA tồn tại 90 ngày
-const TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+// Redis keys
+const KEY_ACCESS  = "zalo_oa:access_token";
+const KEY_REFRESH = "zalo_oa:refresh_token";
+
+// Access token Zalo OA tồn tại 90 ngày; refresh trước 3 ngày
+const TOKEN_TTL_SEC    = 90 * 24 * 60 * 60;       // 7 776 000 s
+const REFRESH_BUFFER_S = 3  * 24 * 60 * 60;       // 259 200 s
 
 async function getToken() {
-  const doc = await ZaloConfig.findOne({ key: KEY }).lean();
-  return doc?.accessToken || env.ZALO_OA_ACCESS_TOKEN || null;
+  const token = await redis.get(KEY_ACCESS);
+  return token || env.ZALO_OA_ACCESS_TOKEN || null;
 }
 
 async function saveTokens(accessToken, refreshToken) {
-  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
-  await ZaloConfig.findOneAndUpdate(
-    { key: KEY },
-    { accessToken, refreshToken, expiresAt, updatedAt: new Date() },
-    { upsert: true, new: true }
-  );
-  logger.info("Zalo OA tokens đã được cập nhật vào MongoDB");
+  await redis.set(KEY_ACCESS, accessToken, { ex: TOKEN_TTL_SEC });
+  if (refreshToken) {
+    // Refresh token không hết hạn theo Zalo, lưu không TTL
+    await redis.set(KEY_REFRESH, refreshToken);
+  }
+  logger.info("Zalo OA tokens đã được lưu vào Redis");
 }
 
-// Khởi tạo lần đầu từ .env nếu MongoDB chưa có
+// Khởi tạo lần đầu từ .env nếu Redis chưa có
 async function initFromEnv() {
-  const existing = await ZaloConfig.findOne({ key: KEY }).lean();
-  if (!existing?.accessToken && env.ZALO_OA_ACCESS_TOKEN) {
+  const existing = await redis.get(KEY_ACCESS);
+  if (!existing && env.ZALO_OA_ACCESS_TOKEN) {
     await saveTokens(env.ZALO_OA_ACCESS_TOKEN, env.ZALO_OA_REFRESH_TOKEN || null);
-    logger.info("Zalo OA tokens đã được khởi tạo từ .env");
+    logger.info("Zalo OA tokens đã được khởi tạo từ .env vào Redis");
   }
 }
 
 async function needsRefresh() {
-  const doc = await ZaloConfig.findOne({ key: KEY }).lean();
-  if (!doc?.expiresAt) return false;
-  return new Date(doc.expiresAt).getTime() - Date.now() < REFRESH_BUFFER_MS;
+  // Kiểm tra TTL còn lại của access token trong Redis
+  const ttl = await redis.ttl(KEY_ACCESS);
+  // ttl = -2 (key không tồn tại), -1 (không có TTL), hoặc số giây còn lại
+  if (ttl < 0) return false;
+  return ttl < REFRESH_BUFFER_S;
 }
 
 async function refreshAccessToken() {
-  const doc = await ZaloConfig.findOne({ key: KEY }).lean();
-  const refreshToken = doc?.refreshToken || env.ZALO_OA_REFRESH_TOKEN;
+  const refreshToken =
+    (await redis.get(KEY_REFRESH)) || env.ZALO_OA_REFRESH_TOKEN;
 
   if (!refreshToken) {
     logger.warn("Zalo: không có refresh token — không thể tự làm mới");
@@ -52,8 +55,8 @@ async function refreshAccessToken() {
     const { data } = await axios.post(
       "https://oauth.zaloapp.com/v4/oa/access_token",
       new URLSearchParams({
-        app_id: env.ZALO_APP_ID,
-        grant_type: "refresh_token",
+        app_id:        env.ZALO_APP_ID,
+        grant_type:    "refresh_token",
         refresh_token: refreshToken,
       }),
       {
