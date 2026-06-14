@@ -29,7 +29,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ─── Root — Zalo site verification meta tag ───────────────
 app.get("/", (req, res) => {
-  const code = process.env.ZALO_VERIFIER_CODE || "";
+  const code = process.env.ZALO_VERIFIER_CODE || "UExa2QR4Dp9Ymf5bj_KVPN7eXsMTdb8pDJWm";
   res.type("html").send(
     `<!DOCTYPE html><html><head><meta name="zalo-platform-site-verification" content="${code}"/></head><body></body></html>`
   );
