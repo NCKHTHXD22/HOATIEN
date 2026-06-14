@@ -27,6 +27,14 @@ app.use(morgan(env.isDev ? "dev" : "combined"));
 // Phục vụ file upload tĩnh
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// ─── Root — Zalo site verification meta tag ───────────────
+app.get("/", (req, res) => {
+  const code = process.env.ZALO_VERIFIER_CODE || "";
+  res.type("html").send(
+    `<!DOCTYPE html><html><head><meta name="zalo-platform-site-verification" content="${code}"/></head><body></body></html>`
+  );
+});
+
 // ─── Health check ─────────────────────────────────────────
 app.get("/health", (req, res) => {
   res.json({
