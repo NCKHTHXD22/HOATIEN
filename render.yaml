@@ -2,9 +2,8 @@ services:
   - type: web
     name: hoatien-backend
     runtime: node
-    rootDir: backend
-    buildCommand: npm install && npx prisma generate
-    startCommand: npm start
+    buildCommand: cd backend && npm install && npx prisma generate
+    startCommand: cd backend && npm start
     plan: free
     envVars:
       - key: NODE_ENV
