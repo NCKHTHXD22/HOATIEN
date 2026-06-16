@@ -78,6 +78,7 @@ model Village {
   ma          String      @unique
   ten         String
   truongThon  String?
+  moTa        String?
   households  Household[]
   admins      AdminUser[] @relation("AdminVillages")
   createdAt   DateTime    @default(now())
