@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Send, Plus, Eye, Trash2, CheckCircle2, XCircle,
   Search, RefreshCw, MessageSquare, Mail, Phone, X,
+  Image, FileText,
 } from 'lucide-react'
 import {
   getNotifications, createNotification, sendNotification, deleteNotification,
@@ -36,7 +37,7 @@ function fmtDate(d) {
   return new Date(d).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// ── Modal Soạn thông báo ───────────────────────────────────
+// ── Modal Soạn thông báo ── (Redesigned — Quế Sơn style) ──
 function ComposeModal({ open, onClose, onDone }) {
   const [form, setForm] = useState({ tieuDe: '', noiDung: '', kenhGui: [], memberIds: [], groupIds: [] })
   const [groups, setGroups] = useState([])
@@ -45,14 +46,25 @@ function ComposeModal({ open, onClose, onDone }) {
   const [loading, setLoading] = useState(false)
   const [scheduleMode, setScheduleMode] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
-  const [files, setFiles] = useState([])
-  const [_savedId, setSavedId] = useState(null)
-  const [tab, setTab] = useState('nhom') // 'nhom' | 'canhan'
+  const [tab, setTab] = useState('nhom')
+
+  // Attachment state (image preview + other files)
+  const [attachTab, setAttachTab] = useState('image')
+  const [imgPreviews, setImgPreviews] = useState([])  // [{file, url}]
+  const [otherFiles, setOtherFiles] = useState([])    // [{file}]
+
+  // Inline toast (tránh dùng alert())
+  const [toast, setToast] = useState(null) // {type: 'success'|'error', msg}
+  const showToast = (type, msg) => {
+    setToast({ type, msg })
+    setTimeout(() => setToast(null), 3500)
+  }
 
   useEffect(() => {
     if (!open) return
     setForm({ tieuDe: '', noiDung: '', kenhGui: [], memberIds: [], groupIds: [] })
-    setSavedId(null); setFiles([]); setScheduleMode(false); setScheduledAt('')
+    setImgPreviews([]); setOtherFiles([])
+    setScheduleMode(false); setScheduledAt(''); setToast(null)
     getGroups().then(r => setGroups(r.data || [])).catch(() => {})
   }, [open])
 
@@ -84,191 +96,336 @@ function ComposeModal({ open, onClose, onDone }) {
       memberIds: f.memberIds.includes(id) ? f.memberIds.filter(m => m !== id) : [...f.memberIds, id],
     }))
 
+  function handleImageFiles(files) {
+    const imgs = Array.from(files)
+      .filter(f => f.type.startsWith('image/'))
+      .slice(0, 5 - imgPreviews.length)
+    if (!imgs.length) return
+    setImgPreviews(prev => [...prev, ...imgs.map(f => ({ file: f, url: URL.createObjectURL(f) }))])
+  }
+
+  function handleOtherFile(file) {
+    if (!file) return
+    setOtherFiles(prev => [...prev, { file }])
+  }
+
   const handleSave = async () => {
-    if (!form.tieuDe.trim() || !form.noiDung.trim()) return alert('Nhập tiêu đề và nội dung')
-    if (form.kenhGui.length === 0) return alert('Chọn ít nhất 1 kênh gửi')
-    if (form.memberIds.length === 0 && form.groupIds.length === 0) return alert('Chọn ít nhất 1 người nhận hoặc nhóm')
+    if (!form.tieuDe.trim() || !form.noiDung.trim()) return showToast('error', 'Nhập tiêu đề và nội dung')
+    if (form.kenhGui.length === 0) return showToast('error', 'Chọn ít nhất 1 kênh gửi')
+    if (form.memberIds.length === 0 && form.groupIds.length === 0) return showToast('error', 'Chọn ít nhất 1 người nhận hoặc nhóm')
     setLoading(true)
     try {
       const res = await createNotification(form)
       const id = res.data.id
-      setSavedId(id)
-      for (const file of files) {
+      const allFiles = [...imgPreviews.map(p => p.file), ...otherFiles.map(f => f.file)]
+      for (const file of allFiles) {
         await uploadAttachment(id, file).catch(() => {})
       }
       if (scheduleMode && scheduledAt) {
         await scheduleNotification(id, scheduledAt)
-        alert('Đã lưu và lên lịch gửi!')
+        showToast('success', 'Đã lưu và lên lịch gửi thành công!')
       } else {
         await sendNotification(id)
-        alert('Đã gửi thông báo!')
+        showToast('success', 'Đã gửi thông báo thành công!')
       }
-      onDone(); onClose()
+      setTimeout(() => { onDone(); onClose() }, 1200)
     } catch (err) {
-      alert(err.response?.data?.message || 'Có lỗi xảy ra')
+      showToast('error', err.response?.data?.message || 'Có lỗi xảy ra')
     } finally { setLoading(false) }
   }
 
   if (!open) return null
+
+  const totalAttach = imgPreviews.length + otherFiles.length
+  const totalRecipients = form.groupIds.length + form.memberIds.length
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-800">Soạn thông báo mới</h2>
-          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100"><X size={18} /></button>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">Soạn thông báo mới</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Soạn và gửi thông báo qua Zalo, Email, SMS</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {/* Tiêu đề */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề <span className="text-red-500">*</span></label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="Nhập tiêu đề thông báo..."
-              value={form.tieuDe}
-              onChange={e => setForm(f => ({ ...f, tieuDe: e.target.value }))}
-              maxLength={200}
-            />
+        {/* Inline Toast */}
+        {toast && (
+          <div className={`mx-6 mt-3 rounded-xl px-4 py-2.5 text-sm font-medium flex items-center gap-2 shrink-0 ${
+            toast.type === 'success'
+              ? 'bg-green-50 text-green-700 border border-green-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+          }`}>
+            {toast.type === 'success' ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+            {toast.msg}
           </div>
+        )}
 
-          {/* Nội dung */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nội dung <span className="text-red-500">*</span></label>
-            <textarea
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
-              rows={5}
-              placeholder="Nhập nội dung thông báo..."
-              value={form.noiDung}
-              onChange={e => setForm(f => ({ ...f, noiDung: e.target.value }))}
-              maxLength={2000}
-            />
-            <p className="text-xs text-gray-400 text-right">{form.noiDung.length}/2000</p>
-          </div>
+        {/* Body — 2 cột */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x min-h-full">
 
-          {/* Kênh gửi */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Kênh gửi <span className="text-red-500">*</span></label>
-            <div className="flex gap-3">
-              {['ZALO', 'EMAIL', 'SMS'].map(ch => (
-                <button
-                  key={ch}
-                  onClick={() => toggleChannel(ch)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    form.kenhGui.includes(ch)
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  {CHANNEL_ICON[ch]}
-                  <span>{ch}</span>
-                  {form.kenhGui.includes(ch) && <CheckCircle2 size={14} className="text-blue-500" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Người nhận */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Người nhận <span className="text-red-500">*</span></label>
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setTab('nhom')}
-                className={`px-3 py-1.5 text-sm rounded-md ${tab === 'nhom' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-              >Theo nhóm</button>
-              <button
-                onClick={() => setTab('canhan')}
-                className={`px-3 py-1.5 text-sm rounded-md ${tab === 'canhan' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-              >Cá nhân</button>
-            </div>
-
-            {tab === 'nhom' && (
-              <div className="max-h-40 overflow-y-auto border rounded-lg divide-y">
-                {groups.length === 0
-                  ? <p className="text-center text-sm text-gray-400 py-4">Chưa có nhóm nào. Tạo nhóm tại "Người nhận"</p>
-                  : groups.map(g => (
-                    <label key={g.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                      <input type="checkbox" checked={form.groupIds.includes(g.id)} onChange={() => toggleGroup(g.id)} />
-                      <span className="text-sm flex-1">{g.ten}</span>
-                      <span className="text-xs text-gray-400">{g._count?.members || 0} người</span>
-                    </label>
-                  ))
-                }
-              </div>
-            )}
-
-            {tab === 'canhan' && (
+            {/* ── Cột trái: Tiêu đề, Nội dung, Đính kèm ── */}
+            <div className="px-6 py-5 space-y-4">
+              {/* Tiêu đề */}
               <div>
-                <div className="relative mb-2">
-                  <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                  <input
-                    className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    placeholder="Tìm kiếm nhân khẩu..."
-                    value={memberSearch}
-                    onChange={e => setMemberSearch(e.target.value)}
-                  />
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Tiêu đề <span className="text-red-500">*</span>
+                </label>
+                <input
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                  placeholder="Nhập tiêu đề thông báo..."
+                  value={form.tieuDe}
+                  onChange={e => setForm(f => ({ ...f, tieuDe: e.target.value }))}
+                  maxLength={200}
+                />
+              </div>
+
+              {/* Nội dung */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Nội dung <span className="text-red-500">*</span>
+                  </label>
+                  <span className={`text-xs font-mono ${form.noiDung.length > 1800 ? 'text-red-500' : 'text-gray-400'}`}>
+                    {form.noiDung.length}/2000
+                  </span>
                 </div>
-                <div className="max-h-40 overflow-y-auto border rounded-lg divide-y">
-                  {members.map(m => (
-                    <label key={m.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                      <input type="checkbox" checked={form.memberIds.includes(m.id)} onChange={() => toggleMember(m.id)} />
-                      <span className="text-sm flex-1">{m.hoTen}</span>
-                      <span className="text-xs text-gray-400">{m.household?.village?.ten}</span>
+                <textarea
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none transition-all"
+                  rows={5}
+                  placeholder="Nhập nội dung thông báo..."
+                  value={form.noiDung}
+                  onChange={e => setForm(f => ({ ...f, noiDung: e.target.value.slice(0, 2000) }))}
+                />
+              </div>
+
+              {/* Đính kèm */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Đính kèm</label>
+
+                {/* Attach tabs */}
+                <div className="flex gap-1 rounded-xl bg-gray-100 p-1 mb-3">
+                  {[
+                    { id: 'image', label: 'Hình ảnh', Icon: Image },
+                    { id: 'file',  label: 'File',     Icon: FileText },
+                  ].map(({ id, label, Icon }) => (
+                    <button key={id} onClick={() => setAttachTab(id)}
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                        attachTab === id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Icon size={13} /> {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Image panel */}
+                {attachTab === 'image' && (
+                  <div className="space-y-2">
+                    <label
+                      className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 p-5 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all"
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); handleImageFiles(e.dataTransfer.files) }}
+                    >
+                      <Image size={22} className="text-gray-300" />
+                      <span className="text-sm text-gray-400">Chọn hoặc kéo thả ảnh · tối đa 5 ảnh</span>
+                      <input type="file" accept="image/*" multiple className="hidden"
+                        onChange={e => handleImageFiles(e.target.files)} />
                     </label>
+                    {imgPreviews.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {imgPreviews.map((p, i) => (
+                          <div key={i} className="relative h-16 w-16 rounded-lg overflow-hidden border border-gray-200">
+                            <img src={p.url} alt="" className="h-full w-full object-cover" />
+                            <button
+                              onClick={() => setImgPreviews(prev => prev.filter((_, j) => j !== i))}
+                              className="absolute top-0.5 right-0.5 rounded-full bg-red-500 text-white h-4 w-4 flex items-center justify-center hover:bg-red-600 transition-colors"
+                            ><X size={10} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* File panel */}
+                {attachTab === 'file' && (
+                  <div className="space-y-2">
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 p-5 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all">
+                      <FileText size={22} className="text-gray-300" />
+                      <span className="text-sm text-gray-400">Chọn file .pdf .docx .xlsx</span>
+                      <input type="file" accept=".pdf,.docx,.xlsx,.xls" className="hidden"
+                        onChange={e => handleOtherFile(e.target.files[0])} />
+                    </label>
+                    {otherFiles.map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2.5">
+                        <FileText size={15} className="text-blue-500 shrink-0" />
+                        <span className="text-sm flex-1 truncate">{f.file.name}</span>
+                        <button onClick={() => setOtherFiles(prev => prev.filter((_, j) => j !== i))}
+                          className="text-gray-400 hover:text-red-500 transition-colors"><X size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Cột phải: Kênh gửi, Người nhận, Lên lịch ── */}
+            <div className="px-6 py-5 space-y-5">
+
+              {/* Kênh gửi */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Kênh gửi <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { id: 'ZALO',  label: 'ZALO',  icon: <span className="text-blue-500 text-xs font-extrabold">Z</span> },
+                    { id: 'EMAIL', label: 'EMAIL', icon: <Mail size={13} className="text-orange-500" /> },
+                    { id: 'SMS',   label: 'SMS',   icon: <Phone size={13} className="text-green-600" /> },
+                  ].map(ch => (
+                    <button key={ch.id} onClick={() => toggleChannel(ch.id)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-all ${
+                        form.kenhGui.includes(ch.id)
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {ch.icon}
+                      <span>{ch.label}</span>
+                      {form.kenhGui.includes(ch.id) && <CheckCircle2 size={13} className="text-blue-500" />}
+                    </button>
                   ))}
                 </div>
               </div>
-            )}
 
-            {(form.groupIds.length + form.memberIds.length > 0) && (
-              <p className="text-xs text-blue-600 mt-1">
-                Đã chọn: {form.groupIds.length} nhóm, {form.memberIds.length} cá nhân
-              </p>
-            )}
-          </div>
+              {/* Người nhận */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Người nhận <span className="text-red-500">*</span>
+                </label>
+                {/* Tab nhóm / cá nhân */}
+                <div className="flex gap-1 rounded-xl bg-gray-100 p-1 mb-3">
+                  {[
+                    { id: 'nhom',   label: 'Theo nhóm' },
+                    { id: 'canhan', label: 'Cá nhân'   },
+                  ].map(t => (
+                    <button key={t.id} onClick={() => setTab(t.id)}
+                      className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-all ${
+                        tab === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >{t.label}</button>
+                  ))}
+                </div>
 
-          {/* Đính kèm */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Đính kèm file</label>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
-              className="text-sm text-gray-600"
-              onChange={e => setFiles([...e.target.files])}
-            />
-            {files.length > 0 && (
-              <p className="text-xs text-gray-500 mt-1">{files.map(f => f.name).join(', ')}</p>
-            )}
-          </div>
+                {tab === 'nhom' && (
+                  <div className="max-h-44 overflow-y-auto rounded-xl border divide-y">
+                    {groups.length === 0
+                      ? <p className="text-center text-sm text-gray-400 py-4">Chưa có nhóm. Tạo nhóm tại "Người nhận"</p>
+                      : groups.map(g => (
+                        <label key={g.id}
+                          className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition-colors ${form.groupIds.includes(g.id) ? 'bg-blue-50/50' : ''}`}
+                        >
+                          <input type="checkbox" checked={form.groupIds.includes(g.id)} onChange={() => toggleGroup(g.id)} className="rounded" />
+                          <div className="h-7 w-7 rounded-full bg-violet-100 flex items-center justify-center text-violet-600 text-xs font-bold shrink-0">
+                            {(g.ten || '?')[0]?.toUpperCase()}
+                          </div>
+                          <span className="text-sm flex-1">{g.ten}</span>
+                          <span className="text-xs text-gray-400">{g._count?.members || 0} người</span>
+                        </label>
+                      ))
+                    }
+                  </div>
+                )}
 
-          {/* Lên lịch */}
-          <div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={scheduleMode} onChange={e => setScheduleMode(e.target.checked)} />
-              <span className="text-sm font-medium text-gray-700">Lên lịch gửi tự động</span>
-            </label>
-            {scheduleMode && (
-              <input
-                type="datetime-local"
-                className="mt-2 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                value={scheduledAt}
-                onChange={e => setScheduledAt(e.target.value)}
-                min={new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16)}
-              />
-            )}
+                {tab === 'canhan' && (
+                  <div>
+                    <div className="relative mb-2">
+                      <Search size={13} className="absolute left-3 top-2.5 text-gray-400" />
+                      <input
+                        className="w-full border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                        placeholder="Tìm kiếm nhân khẩu..."
+                        value={memberSearch}
+                        onChange={e => setMemberSearch(e.target.value)}
+                      />
+                    </div>
+                    <div className="max-h-36 overflow-y-auto rounded-xl border divide-y">
+                      {members.length === 0
+                        ? <p className="text-center text-sm text-gray-400 py-4">Nhập tên để tìm kiếm</p>
+                        : members.map(m => (
+                          <label key={m.id}
+                            className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition-colors ${form.memberIds.includes(m.id) ? 'bg-blue-50/50' : ''}`}
+                          >
+                            <input type="checkbox" checked={form.memberIds.includes(m.id)} onChange={() => toggleMember(m.id)} className="rounded" />
+                            <div className="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold shrink-0">
+                              {(m.hoTen || '?')[0]?.toUpperCase()}
+                            </div>
+                            <span className="text-sm flex-1">{m.hoTen}</span>
+                            <span className="text-xs text-gray-400 truncate max-w-[5rem]">{m.household?.village?.ten}</span>
+                          </label>
+                        ))
+                      }
+                    </div>
+                  </div>
+                )}
+
+                {totalRecipients > 0 && (
+                  <p className="text-xs text-blue-600 mt-1.5 font-medium">
+                    Đã chọn:{' '}
+                    {form.groupIds.length > 0 && `${form.groupIds.length} nhóm`}
+                    {form.groupIds.length > 0 && form.memberIds.length > 0 && ', '}
+                    {form.memberIds.length > 0 && `${form.memberIds.length} cá nhân`}
+                  </p>
+                )}
+              </div>
+
+              {/* Lên lịch */}
+              <div className="rounded-xl border border-gray-200 px-4 py-3.5 space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={scheduleMode} onChange={e => setScheduleMode(e.target.checked)} className="rounded" />
+                  <span className="text-sm font-medium text-gray-700">Lên lịch gửi tự động</span>
+                </label>
+                {scheduleMode && (
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                    value={scheduledAt}
+                    onChange={e => setScheduledAt(e.target.value)}
+                    min={new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16)}
+                  />
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-            {scheduleMode ? 'Lưu & Lên lịch' : 'Gửi ngay'}
-          </button>
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex items-center justify-between shrink-0">
+          <p className="text-xs text-gray-400">
+            {totalAttach > 0 && `${totalAttach} tệp đính kèm · `}
+            {totalRecipients > 0 ? `${totalRecipients} người nhận` : 'Chưa chọn người nhận'}
+          </p>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
+              Hủy
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={loading}
+              className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {loading
+                ? <><RefreshCw size={14} className="animate-spin" /> Đang xử lý...</>
+                : <><Send size={14} /> {scheduleMode ? 'Lưu & Lên lịch' : 'Gửi ngay'}</>
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>

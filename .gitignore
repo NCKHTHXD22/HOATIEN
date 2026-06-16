@@ -24,6 +24,13 @@ yarn-error.log*
 # IDE configurations
 .vscode/
 .idea/
+
+# Claude Code local settings (personal, không commit)
+.claude/settings.local.json
+
+# Python cache
+__pycache__/
+*.pyc
 *.suo
 *.ntvs*
 *.njsproj
