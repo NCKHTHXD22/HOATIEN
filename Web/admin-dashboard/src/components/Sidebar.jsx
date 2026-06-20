@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, Newspaper, FileText,
   MessageSquareWarning, Users, BarChart3, Settings, Shield, LogOut, MapPin,
-  Bell, UserRound, ClipboardList, PieChart, MessageCircle
+  Bell, UserRound, ClipboardList, PieChart, MessageCircle, ArrowRightLeft,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -14,9 +14,10 @@ const navGroups = [
   {
     label: 'Hành chính',
     items: [
-      { to: '/ho-so',    icon: FolderOpen, label: 'Hồ sơ hành chính' },
-      { to: '/thon-xom', icon: MapPin,     label: 'Thôn / Địa bàn' },
-      { to: '/van-ban',  icon: FileText,   label: 'Quản lý văn bản' },
+      { to: '/ho-so',     icon: FolderOpen,     label: 'Hồ sơ dân cư' },
+      { to: '/thon-xom',  icon: MapPin,         label: 'Thôn / Địa bàn' },
+      { to: '/bien-dong', icon: ArrowRightLeft, label: 'Biến động dân cư' },
+      { to: '/van-ban',   icon: FileText,       label: 'Quản lý văn bản' },
     ],
   },
   {
