@@ -132,9 +132,12 @@ async function sendMessage(zaloUserId, text, attachments = []) {
     const env = require("../config/env");
     let imgUrl = images[0].url;
     if (imgUrl.startsWith("/")) {
-      imgUrl = (env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 && env.CORS_ORIGINS[0].includes("dxvtech.vn"))
-        ? "https://api.dxvtech.vn" + imgUrl
-        : "https://api.dxvtech.vn" + imgUrl; // Cố định domain api
+      const baseUrl = (env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 && env.CORS_ORIGINS[0].includes("dxvtech.vn"))
+        ? "https://api.dxvtech.vn" 
+        : "https://api.dxvtech.vn"; // Cố định domain api
+        
+      // encodeURI để tránh lỗi khoảng trắng trong tên file
+      imgUrl = baseUrl + encodeURI(imgUrl);
     }
 
     payload.message = {
