@@ -128,6 +128,15 @@ async function sendMessage(zaloUserId, text, attachments = []) {
 
   // Zalo OA hỗ trợ gửi kèm 1 ảnh qua media template
   if (images.length > 0 && images[0].url) {
+    // Nếu url là dạng relative (/uploads/...), phải thêm domain vào
+    const env = require("../config/env");
+    let imgUrl = images[0].url;
+    if (imgUrl.startsWith("/")) {
+      imgUrl = (env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 && env.CORS_ORIGINS[0].includes("dxvtech.vn"))
+        ? "https://api.dxvtech.vn" + imgUrl
+        : "https://api.dxvtech.vn" + imgUrl; // Cố định domain api
+    }
+
     payload.message = {
       text,
       attachment: {
@@ -136,7 +145,7 @@ async function sendMessage(zaloUserId, text, attachments = []) {
           template_type: "media",
           elements: [{
             media_type: "image",
-            url: images[0].url
+            url: imgUrl
           }]
         }
       }
