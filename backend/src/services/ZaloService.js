@@ -117,7 +117,17 @@ async function _sendZaloMessage(toUserId, text, token) {
 async function sendMessage(zaloUserId, text) {
   const token = await ZaloConfigRepo.getValidToken();
   if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
-  await _sendZaloMessage(zaloUserId, text, token);
+  // Khác _sendZaloMessage (best-effort cho luồng tra cứu): ở đây phải NÉM lỗi
+  // để NotificationService đánh dấu FAILED chính xác.
+  const res = await axios.post(
+    "https://openapi.zalo.me/v3.0/oa/message/cs",
+    { recipient: { user_id: zaloUserId }, message: { text } },
+    { headers: { access_token: token } }
+  );
+  if (res.data?.error && res.data.error !== 0) {
+    throw new Error(`Zalo error ${res.data.error}: ${res.data.message || "Gửi thất bại"}`);
+  }
+  return res.data;
 }
 
 module.exports = { handleMessage, sendMessage };
