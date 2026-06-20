@@ -20,9 +20,9 @@ export default function ZaloFollowersModal({ open, onClose }) {
     setLoading(true)
     try {
       const res = await getFollowers()
-      setFollowers(res.data?.followers || [])
-      setTotal(res.data?.total || 0)
-      setSyncing(res.data?.syncing || false)
+      setFollowers(res.data?.data?.followers || [])
+      setTotal(res.data?.data?.total || 0)
+      setSyncing(res.data?.data?.syncing || false)
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }, [])
@@ -33,7 +33,7 @@ export default function ZaloFollowersModal({ open, onClose }) {
     try {
       setSyncing(true)
       const res = await syncFollowers()
-      alert(res.message || 'Đã bắt đầu đồng bộ')
+      alert(res.data?.message || 'Đã bắt đầu đồng bộ')
       load()
     } catch (err) {
       alert(err.response?.data?.message || 'Lỗi đồng bộ')
@@ -46,7 +46,7 @@ export default function ZaloFollowersModal({ open, onClose }) {
     setSendModal(prev => ({ ...prev, sending: true }))
     try {
       const res = await sendDirectMessage({ userIds: sendModal.userIds, message: sendModal.text })
-      alert(`Gửi xong: Thành công ${res.data.sent}, Thất bại ${res.data.failed}`)
+      alert(`Gửi xong: Thành công ${res.data?.data?.sent}, Thất bại ${res.data?.data?.failed}`)
       setSendModal({ open: false, userIds: [], text: '', sending: false })
     } catch (err) {
       alert(err.response?.data?.message || 'Lỗi gửi tin')
@@ -59,7 +59,7 @@ export default function ZaloFollowersModal({ open, onClose }) {
     if (!linkModal.open || !linkModal.searchQ) return
     const t = setTimeout(() => {
       searchMembers(linkModal.searchQ)
-        .then(res => setLinkModal(p => ({ ...p, results: res.data || [] })))
+        .then(res => setLinkModal(p => ({ ...p, results: res.data?.data || [] })))
         .catch(() => {})
     }, 400)
     return () => clearTimeout(t)
