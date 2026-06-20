@@ -19,6 +19,11 @@ router.post("/webhook", async (req, res) => {
       return res.status(200).json({ error: 0 });
     }
 
+    // NGUY HIỂM: Phải check event_name để tránh vòng lặp vô tận khi OA gửi tin
+    if (req.body.event_name !== "user_send_text") {
+      return res.status(200).json({ error: 0 });
+    }
+
     ZaloEvent.create({ type: "WEBHOOK", zaloUserId: user_id_by_app, payload: req.body }).catch(() => {});
 
     const reply = await ZaloService.handleMessage(user_id_by_app, message.text);
