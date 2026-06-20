@@ -101,7 +101,7 @@ async function execute(notificationId) {
 async function _sendByChannel(member, kenh, notif) {
   if (kenh === "ZALO") {
     const text = `📢 ${notif.tieuDe}\n\n${notif.noiDung}`;
-    await ZaloService.sendMessage(member.zaloUserId, text);
+    await ZaloService.sendMessage(member.zaloUserId, text, notif.attachments);
   } else if (kenh === "EMAIL") {
     await EmailService.sendEmail({
       to: member.email,

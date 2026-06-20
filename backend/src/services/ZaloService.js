@@ -115,14 +115,37 @@ async function _sendZaloMessage(toUserId, text, token) {
   }
 }
 
-async function sendMessage(zaloUserId, text) {
+async function sendMessage(zaloUserId, text, attachments = []) {
   const token = await ZaloConfigRepo.getValidToken();
   if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
-  // Khác _sendZaloMessage (best-effort cho luồng tra cứu): ở đây phải NÉM lỗi
-  // để NotificationService đánh dấu FAILED chính xác.
+  
+  // Lọc ra các file ảnh (có loai là IMAGE hoặc đuôi là ảnh)
+  const images = (attachments || []).filter(a => 
+    a.loai === "IMAGE" || (a.tenFile && a.tenFile.match(/\.(jpg|jpeg|png|gif)$/i))
+  );
+
+  let payload = { recipient: { user_id: zaloUserId }, message: { text } };
+
+  // Zalo OA hỗ trợ gửi kèm 1 ảnh qua media template
+  if (images.length > 0 && images[0].url) {
+    payload.message = {
+      text,
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "media",
+          elements: [{
+            media_type: "image",
+            url: images[0].url
+          }]
+        }
+      }
+    };
+  }
+
   const res = await axios.post(
     "https://openapi.zalo.me/v2.0/oa/message",
-    { recipient: { user_id: zaloUserId }, message: { text } },
+    payload,
     { headers: { access_token: token } }
   );
   if (res.data?.error && res.data.error !== 0) {
