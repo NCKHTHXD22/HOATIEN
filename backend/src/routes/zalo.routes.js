@@ -13,9 +13,11 @@ const logger = require("../utils/logger");
 // POST /api/zalo/webhook  — Zalo gọi vào đây
 router.post("/webhook", async (req, res) => {
   try {
-    const { user_id_by_app, message } = req.body;
+    const { sender, message } = req.body;
+    // Dùng sender.id (= user_id, KHỚP getfollowers/danh bạ), KHÔNG dùng user_id_by_app (id khác hệ → sinh follower trùng)
+    const userId = sender?.id || req.body.user_id_by_app;
 
-    if (!user_id_by_app || !message?.text) {
+    if (!userId || !message?.text) {
       return res.status(200).json({ error: 0 });
     }
 
@@ -24,10 +26,10 @@ router.post("/webhook", async (req, res) => {
       return res.status(200).json({ error: 0 });
     }
 
-    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: user_id_by_app, payload: req.body }).catch(() => {});
+    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: userId, payload: req.body }).catch(() => {});
 
-    const reply = await ZaloService.handleMessage(user_id_by_app, message.text);
-    logger.info(`Zalo webhook [${user_id_by_app}]: "${message.text}" → replied`);
+    const reply = await ZaloService.handleMessage(userId, message.text);
+    logger.info(`Zalo webhook [${userId}]: "${message.text}" → replied`);
 
     res.status(200).json({ error: 0, message: reply });
   } catch (err) {
