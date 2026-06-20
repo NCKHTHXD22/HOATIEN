@@ -4,6 +4,7 @@ const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const MemberRepo = require("../repositories/pg/MemberRepo");
+const NotificationRepo = require("../repositories/pg/NotificationRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const { authenticate, requireRole, requireSendPermission } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
@@ -13,16 +14,23 @@ const logger = require("../utils/logger");
 // POST /api/zalo/webhook  — Zalo gọi vào đây
 router.post("/webhook", async (req, res) => {
   try {
-    const { user_id_by_app, message } = req.body;
+    const { sender, message } = req.body;
+    // Dùng sender.id (= user_id, KHỚP getfollowers/danh bạ), KHÔNG dùng user_id_by_app (id khác hệ → sinh follower trùng)
+    const userId = sender?.id || req.body.user_id_by_app;
 
-    if (!user_id_by_app || !message?.text) {
+    if (!userId || !message?.text) {
       return res.status(200).json({ error: 0 });
     }
 
-    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: user_id_by_app, payload: req.body }).catch(() => {});
+    // NGUY HIỂM: Phải check event_name để tránh vòng lặp vô tận khi OA gửi tin
+    if (req.body.event_name !== "user_send_text") {
+      return res.status(200).json({ error: 0 });
+    }
 
-    const reply = await ZaloService.handleMessage(user_id_by_app, message.text);
-    logger.info(`Zalo webhook [${user_id_by_app}]: "${message.text}" → replied`);
+    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: userId, payload: req.body }).catch(() => {});
+
+    const reply = await ZaloService.handleMessage(userId, message.text);
+    logger.info(`Zalo webhook [${userId}]: "${message.text}" → replied`);
 
     res.status(200).json({ error: 0, message: reply });
   } catch (err) {
@@ -153,10 +161,20 @@ router.get("/followers", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE
 // Bắt buộc liệt kê userIds rõ ràng — KHÔNG có "gửi tất cả" để tránh bắn nhầm cả OA.
 router.post("/followers/send", authenticate, requireSendPermission(), async (req, res, next) => {
   try {
-    const { userIds = [], message } = req.body;
+    const { userIds = [], message, notificationId } = req.body;
     if (!Array.isArray(userIds) || userIds.length === 0) return fail(res, "Cần chọn ít nhất 1 follower (userIds)");
-    if (!message || !message.trim()) return fail(res, "Nội dung không được để trống");
-    const results = await ZaloService.sendToFollowers(userIds, message.trim());
+    let text = message ? message.trim() : "";
+    let attachments = [];
+    // Nếu gửi từ "Soạn thông báo": lấy tiêu đề/nội dung/đính kèm từ notification
+    if (notificationId) {
+      const notif = await NotificationRepo.findById(notificationId);
+      if (notif) {
+        text = `📢 ${notif.tieuDe}\n\n${notif.noiDung}`;
+        attachments = notif.attachments || [];
+      }
+    }
+    if (!text) return fail(res, "Nội dung không được để trống");
+    const results = await ZaloService.sendToFollowers(userIds, text, attachments);
     const sent = results.filter((r) => r.sent).length;
     ok(res, { sent, failed: results.length - sent, results }, `Đã gửi ${sent}/${results.length}`);
   } catch (err) { next(err); }

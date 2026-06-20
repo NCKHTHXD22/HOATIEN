@@ -55,6 +55,7 @@ async function handleMessage(zaloUserId, text) {
       state: nextState, queryType: queryType || session.queryType,
       lastQuery: query.value, resultCount: results.length,
     });
+    await _autoLink(zaloUserId, query);
   } else {
     await ZaloSessionRepo.updateState(zaloUserId, {
       state: nextState,
@@ -103,6 +104,29 @@ async function _pgLikeFallback(name) {
   });
 }
 
+// Tự động liên kết follower Zalo ↔ nhân khẩu khi dân tra cứu chính họ (CCCD/SĐT khớp DUY NHẤT).
+async function _autoLink(zaloUserId, query) {
+  try {
+    let member = null;
+    if (query.type === "cccd") {
+      member = await MemberRepo.findByCCCD(query.value);
+    } else if (query.type === "sdt") {
+      const members = await MemberRepo.findBySdt(query.value);
+      if (members.length === 1) member = members[0]; // chỉ link khi SĐT khớp đúng 1 người
+    }
+    if (!member) return;
+    // KHÔNG ghi đè nếu nhân khẩu đã gán cho userId khác
+    if (member.zaloUserId && member.zaloUserId !== zaloUserId) return;
+    if (member.zaloUserId !== zaloUserId) {
+      await MemberRepo.update(member.id, { zaloUserId });
+    }
+    await ZaloFollowerRepo.setLink(zaloUserId, member.id);
+    logger.info(`Auto-link Zalo ${zaloUserId} -> member ${member.id} (${member.hoTen}) via ${query.type}`);
+  } catch (e) {
+    logger.warn(`Auto-link failed [${zaloUserId}]: ${e.message}`);
+  }
+}
+
 async function _sendZaloMessage(toUserId, text, token) {
   try {
     await axios.post(
@@ -115,19 +139,102 @@ async function _sendZaloMessage(toUserId, text, token) {
   }
 }
 
-async function sendMessage(zaloUserId, text) {
+// URL tuyệt đối cho file trong /uploads (Zalo tải qua URL public của backend)
+function _absUrl(url) {
+  if (!url) return url;
+  return url.startsWith("/") ? "https://api.dxvtech.vn" + encodeURI(url) : url;
+}
+
+// Upload 1 file tài liệu lên Zalo OA -> trả token (mirror QUESON).
+// Tải file từ URL public của backend về buffer rồi upload multipart (dễ retry khi -216).
+async function _uploadFileToZalo(fileUrl, originalName) {
+  const FormData = require("form-data");
+  const resp = await axios.get(fileUrl, { responseType: "arraybuffer" });
+  const buffer = Buffer.from(resp.data);
+  const doUpload = (token) => {
+    const form = new FormData();
+    form.append("file", buffer, { filename: originalName || "file" });
+    return axios.post("https://openapi.zalo.me/v2.0/oa/upload/file", form, {
+      headers: { ...form.getHeaders(), access_token: token },
+    });
+  };
+  let res = await doUpload(await ZaloConfigRepo.getValidToken());
+  if (res.data?.error === -216) {
+    const nt = await ZaloConfigRepo.refreshAccessToken();
+    if (nt) res = await doUpload(nt);
+  }
+  if (res.data?.error !== 0) {
+    throw new Error(`Zalo upload file error ${res.data?.error}: ${res.data?.message}`);
+  }
+  return res.data.data.token;
+}
+
+async function sendMessage(zaloUserId, text, attachments = []) {
   const token = await ZaloConfigRepo.getValidToken();
   if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
-  // Khác _sendZaloMessage (best-effort cho luồng tra cứu): ở đây phải NÉM lỗi
-  // để NotificationService đánh dấu FAILED chính xác.
+  
+  // Lọc ra các file ảnh (có loai là IMAGE hoặc đuôi là ảnh)
+  const images = (attachments || []).filter(a => 
+    a.loai === "IMAGE" || (a.tenFile && a.tenFile.match(/\.(jpg|jpeg|png|gif)$/i))
+  );
+
+  let payload = { recipient: { user_id: zaloUserId }, message: { text } };
+
+  // Zalo OA hỗ trợ gửi kèm 1 ảnh qua media template
+  if (images.length > 0 && images[0].url) {
+    // Nếu url là dạng relative (/uploads/...), phải thêm domain vào
+    const env = require("../config/env");
+    let imgUrl = images[0].url;
+    if (imgUrl.startsWith("/")) {
+      const baseUrl = (env.CORS_ORIGINS && env.CORS_ORIGINS.length > 0 && env.CORS_ORIGINS[0].includes("dxvtech.vn"))
+        ? "https://api.dxvtech.vn" 
+        : "https://api.dxvtech.vn"; // Cố định domain api
+        
+      // encodeURI để tránh lỗi khoảng trắng trong tên file
+      imgUrl = baseUrl + encodeURI(imgUrl);
+    }
+
+    payload.message = {
+      text,
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "media",
+          elements: [{
+            media_type: "image",
+            url: imgUrl
+          }]
+        }
+      }
+    };
+  }
+
   const res = await axios.post(
     "https://openapi.zalo.me/v2.0/oa/message",
-    { recipient: { user_id: zaloUserId }, message: { text } },
+    payload,
     { headers: { access_token: token } }
   );
   if (res.data?.error && res.data.error !== 0) {
     throw new Error(`Zalo error ${res.data.error}: ${res.data.message || "Gửi thất bại"}`);
   }
+
+  // Gửi file tài liệu (pdf/docx/xlsx...) — mỗi file 1 message riêng (Zalo không gộp với text)
+  const docs = (attachments || []).filter(
+    (a) => a.url && a.loai !== "IMAGE" && !(a.tenFile && a.tenFile.match(/\.(jpg|jpeg|png|gif)$/i))
+  );
+  for (const f of docs) {
+    const fileToken = await _uploadFileToZalo(_absUrl(f.url), f.tenFile);
+    const t2 = await ZaloConfigRepo.getValidToken();
+    const fr = await axios.post(
+      "https://openapi.zalo.me/v2.0/oa/message",
+      { recipient: { user_id: zaloUserId }, message: { attachment: { type: "file", payload: { token: fileToken } } } },
+      { headers: { access_token: t2 } }
+    );
+    if (fr.data?.error && fr.data.error !== 0) {
+      throw new Error(`Zalo file error ${fr.data.error}: ${fr.data.message || "Gửi file thất bại"}`);
+    }
+  }
+
   return res.data;
 }
 
@@ -205,11 +312,11 @@ function startSyncFollowers() {
 const isSyncing = () => _syncing;
 
 // Gửi 1 tin tới nhiều follower (theo user_id). Trả về kết quả từng người.
-async function sendToFollowers(userIds, text) {
+async function sendToFollowers(userIds, text, attachments = []) {
   const results = [];
   for (const userId of userIds) {
     try {
-      await sendMessage(userId, text);
+      await sendMessage(userId, text, attachments);
       results.push({ userId, sent: true });
     } catch (e) {
       results.push({ userId, sent: false, error: e.message });
