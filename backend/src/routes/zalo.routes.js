@@ -3,6 +3,7 @@ const axios = require("axios").default;
 const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
+const MemberRepo = require("../repositories/pg/MemberRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const { authenticate, requireRole, requireSendPermission } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
@@ -158,6 +159,34 @@ router.post("/followers/send", authenticate, requireSendPermission(), async (req
     const results = await ZaloService.sendToFollowers(userIds, message.trim());
     const sent = results.filter((r) => r.sent).length;
     ok(res, { sent, failed: results.length - sent, results }, `Đã gửi ${sent}/${results.length}`);
+  } catch (err) { next(err); }
+});
+
+// POST /api/zalo/followers/:userId/link — liên kết tài khoản Zalo với Nhân khẩu
+router.post("/followers/:userId/link", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { memberId } = req.body; // có thể null để hủy liên kết
+    
+    const follower = await ZaloFollowerRepo.findByUserId(userId);
+    if (!follower) return fail(res, "Không tìm thấy người theo dõi Zalo này");
+
+    // Nếu đã liên kết với ai đó trước đây, xóa liên kết cũ ở Postgres
+    if (follower.linkedMemberId) {
+      await MemberRepo.update(follower.linkedMemberId, { zaloUserId: null }).catch(() => {});
+    }
+
+    // Nếu có memberId mới, set vào Postgres
+    if (memberId) {
+      const member = await MemberRepo.findById(memberId);
+      if (!member) return fail(res, "Không tìm thấy hồ sơ nhân khẩu");
+      await MemberRepo.update(memberId, { zaloUserId: userId });
+    }
+
+    // Cập nhật Mongo
+    await ZaloFollowerRepo.setLink(userId, memberId || null);
+
+    ok(res, null, memberId ? "Đã ghép nối thành công" : "Đã hủy ghép nối thành công");
   } catch (err) { next(err); }
 });
 
