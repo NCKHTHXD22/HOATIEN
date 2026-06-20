@@ -131,18 +131,20 @@ router.get("/callback", async (req, res) => {
   }
 });
 
-// POST /api/zalo/followers/sync — đồng bộ danh sách follower từ OA (admin)
+// POST /api/zalo/followers/sync — bắt đầu đồng bộ follower từ OA (chạy nền, admin)
 router.post("/followers/sync", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
   try {
-    const count = await ZaloService.syncFollowers();
-    ok(res, { count }, `Đã đồng bộ ${count} follower`);
+    const r = ZaloService.startSyncFollowers();
+    if (r.running) return ok(res, r, "Đang đồng bộ rồi, vui lòng đợi...");
+    ok(res, r, "Đã bắt đầu đồng bộ (tên cập nhật dần). Xem ở GET /followers.");
   } catch (err) { next(err); }
 });
 
-// GET /api/zalo/followers — danh sách follower đã đồng bộ (admin)
+// GET /api/zalo/followers — danh sách follower đã đồng bộ + tiến độ (admin)
 router.get("/followers", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
   try {
-    ok(res, await ZaloFollowerRepo.findAll());
+    const followers = await ZaloFollowerRepo.findAll();
+    ok(res, { syncing: ZaloService.isSyncing(), total: followers.length, followers });
   } catch (err) { next(err); }
 });
 

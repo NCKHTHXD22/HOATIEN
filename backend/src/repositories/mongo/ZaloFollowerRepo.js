@@ -18,6 +18,24 @@ const upsertMany = async (profiles) => {
   return profiles.length;
 };
 
+// Chỉ chèn user_id mới (KHÔNG ghi đè displayName của follower đã có tên)
+const upsertIds = async (ids) => {
+  if (!ids.length) return 0;
+  const now = new Date();
+  const ops = ids.map((id) => ({
+    updateOne: {
+      filter: { userId: String(id) },
+      update: {
+        $set: { lastSyncedAt: now },
+        $setOnInsert: { displayName: "", avatar: "", linkedMemberId: null },
+      },
+      upsert: true,
+    },
+  }));
+  await ZaloFollower.bulkWrite(ops);
+  return ids.length;
+};
+
 const findAll = () => ZaloFollower.find().sort({ displayName: 1 }).lean();
 
 const findByUserId = (userId) => ZaloFollower.findOne({ userId }).lean();
@@ -25,4 +43,4 @@ const findByUserId = (userId) => ZaloFollower.findOne({ userId }).lean();
 const setLink = (userId, memberId) =>
   ZaloFollower.findOneAndUpdate({ userId }, { linkedMemberId: memberId }, { new: true });
 
-module.exports = { upsertMany, findAll, findByUserId, setLink };
+module.exports = { upsertMany, upsertIds, findAll, findByUserId, setLink };

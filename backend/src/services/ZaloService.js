@@ -176,19 +176,32 @@ async function _getFollowerProfile(userId) {
   };
 }
 
-async function syncFollowers() {
+let _syncing = false;
+
+async function _runSyncFollowers() {
   const ids = await _fetchAllFollowerIds();
-  const profiles = [];
+  // Lưu user_id ngay để follower xuất hiện liền (tên rỗng), không ghi đè tên cũ
+  await ZaloFollowerRepo.upsertIds(ids);
+  // Điền tên/avatar dần (chậm vì Zalo giới hạn tốc độ getprofile)
   for (const userId of ids) {
-    const profile = await _getFollowerProfile(userId).catch(() => ({
-      user_id: userId, display_name: "", avatar: "",
-    }));
-    profiles.push(profile);
+    const p = await _getFollowerProfile(userId).catch(() => null);
+    if (p && p.display_name) await ZaloFollowerRepo.upsertMany([p]);
     await new Promise((r) => setTimeout(r, 250));
   }
-  await ZaloFollowerRepo.upsertMany(profiles);
-  logger.info(`Zalo followers synced: ${profiles.length}`);
-  return profiles.length;
+  logger.info(`Zalo followers synced: ${ids.length}`);
+  return ids.length;
 }
 
-module.exports = { handleMessage, sendMessage, syncFollowers };
+// Chạy NỀN: trả về ngay để tránh nginx 504 khi OA có nhiều follower
+function startSyncFollowers() {
+  if (_syncing) return { running: true };
+  _syncing = true;
+  _runSyncFollowers()
+    .catch((e) => logger.error(`syncFollowers: ${e.message}`))
+    .finally(() => { _syncing = false; });
+  return { started: true };
+}
+
+const isSyncing = () => _syncing;
+
+module.exports = { handleMessage, sendMessage, startSyncFollowers, isSyncing };
