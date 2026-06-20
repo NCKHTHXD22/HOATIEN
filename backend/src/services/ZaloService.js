@@ -106,7 +106,7 @@ async function _pgLikeFallback(name) {
 async function _sendZaloMessage(toUserId, text, token) {
   try {
     await axios.post(
-      "https://openapi.zalo.me/v3.0/oa/message/cs",
+      "https://openapi.zalo.me/v2.0/oa/message",
       { recipient: { user_id: toUserId }, message: { text } },
       { headers: { access_token: token } }
     );
@@ -121,7 +121,7 @@ async function sendMessage(zaloUserId, text) {
   // Khác _sendZaloMessage (best-effort cho luồng tra cứu): ở đây phải NÉM lỗi
   // để NotificationService đánh dấu FAILED chính xác.
   const res = await axios.post(
-    "https://openapi.zalo.me/v3.0/oa/message/cs",
+    "https://openapi.zalo.me/v2.0/oa/message",
     { recipient: { user_id: zaloUserId }, message: { text } },
     { headers: { access_token: token } }
   );
