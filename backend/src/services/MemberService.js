@@ -1,6 +1,7 @@
 const MemberRepo = require("../repositories/pg/MemberRepo");
 const AuditService = require("./AuditService");
 const SearchService = require("./SearchService");
+const ReportCacheRepo = require("../repositories/mongo/ReportCacheRepo");
 const { computeDiff } = require("../utils/diff");
 const { normalizeMember } = require("../utils/normalize");
 
@@ -23,6 +24,7 @@ async function create(data, performedBy) {
   const member = await MemberRepo.create(clean);
   AuditService.log({ entityType: "member", entityId: member.id, action: "CREATE", newData: member, performedBy });
   SearchService.syncIndex(member.householdId).catch(() => {});
+  ReportCacheRepo.invalidateAll().catch(() => {});
   return member;
 }
 
@@ -40,6 +42,7 @@ async function update(id, data, performedBy) {
     oldData: old, newData: updated, diff: computeDiff(old, updated), performedBy,
   });
   SearchService.syncIndex(updated.householdId).catch(() => {});
+  ReportCacheRepo.invalidateAll().catch(() => {});
   return updated;
 }
 
@@ -49,6 +52,7 @@ async function remove(id, performedBy) {
   await MemberRepo.remove(id);
   AuditService.log({ entityType: "member", entityId: id, action: "DELETE", oldData: old, performedBy });
   SearchService.syncIndex(old.householdId).catch(() => {});
+  ReportCacheRepo.invalidateAll().catch(() => {});
 }
 
 module.exports = { getByHousehold, getById, create, update, remove };

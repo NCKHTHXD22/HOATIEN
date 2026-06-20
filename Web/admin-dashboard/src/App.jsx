@@ -11,6 +11,7 @@ import NhanSu from './pages/NhanSu'
 import BaoCao from './pages/BaoCao'
 import CaiDat from './pages/CaiDat'
 import ThonXom from './pages/ThonXom'
+import BienDong from './pages/BienDong'
 import ThongBao from './pages/ThongBao'
 import NguoiNhan from './pages/NguoiNhan'
 import KhaoSat from './pages/KhaoSat'
@@ -38,6 +39,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="ho-so"    element={<HoSo />} />
         <Route path="thon-xom" element={<ThonXom />} />
+        <Route path="bien-dong" element={<BienDong />} />
         <Route path="tin-tuc"  element={<TinTuc />} />
         <Route path="van-ban"  element={<VanBan />} />
         <Route path="phan-anh" element={<PhanAnh />} />

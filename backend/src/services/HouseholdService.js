@@ -2,6 +2,7 @@ const { prisma } = require("../config/database");
 const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
 const AuditService = require("./AuditService");
 const SearchService = require("./SearchService");
+const ReportCacheRepo = require("../repositories/mongo/ReportCacheRepo");
 const { computeDiff } = require("../utils/diff");
 const { normalizeMember } = require("../utils/normalize");
 
@@ -27,6 +28,7 @@ async function create({ soHoKhau, diaChi, lat, lng, trangThai, loaiHo, villageId
 
   AuditService.log({ entityType: "household", entityId: household.id, action: "CREATE", newData: household, performedBy });
   SearchService.syncIndex(household.id).catch(() => {});
+  ReportCacheRepo.invalidateAll().catch(() => {});
 
   return household;
 }
@@ -43,6 +45,7 @@ async function update(id, newData, performedBy) {
     oldData, newData: updated, diff: computeDiff(oldData, updated), performedBy,
   });
   SearchService.syncIndex(id).catch(() => {});
+  ReportCacheRepo.invalidateAll().catch(() => {});
 
   return updated;
 }
@@ -52,6 +55,7 @@ async function remove(id, performedBy) {
   if (!old) throw new Error("Không tìm thấy hộ dân");
   await HouseholdRepo.remove(id);
   AuditService.log({ entityType: "household", entityId: id, action: "DELETE", oldData: old, performedBy });
+  ReportCacheRepo.invalidateAll().catch(() => {});
 }
 
 async function splitHousehold({ sourceId, memberIds, newHeadId, newDiaChi, newVillageId, note }, performedBy) {
@@ -99,6 +103,7 @@ async function splitHousehold({ sourceId, memberIds, newHeadId, newDiaChi, newVi
   AuditService.log({ entityType: "household", entityId: newHousehold.id, action: "SPLIT", newData: updatedNew, performedBy, note });
   SearchService.syncIndex(sourceId).catch(() => {});
   SearchService.syncIndex(newHousehold.id).catch(() => {});
+  ReportCacheRepo.invalidateAll().catch(() => {});
 
   return { source: updatedSource, newHousehold: updatedNew };
 }
@@ -206,6 +211,7 @@ async function mergeHouseholds({ targetId, sourceIds, ghiChu }, performedBy) {
     note: `Nhận gộp từ: ${sourceList}${ghiChu ? " — " + ghiChu : ""}`,
   });
   SearchService.syncIndex(targetId).catch(() => {});
+  ReportCacheRepo.invalidateAll().catch(() => {});
 
   return {
     target: updatedTarget,
