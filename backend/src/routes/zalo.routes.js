@@ -4,6 +4,7 @@ const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const MemberRepo = require("../repositories/pg/MemberRepo");
+const NotificationRepo = require("../repositories/pg/NotificationRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const { authenticate, requireRole, requireSendPermission } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
@@ -160,10 +161,20 @@ router.get("/followers", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE
 // Bắt buộc liệt kê userIds rõ ràng — KHÔNG có "gửi tất cả" để tránh bắn nhầm cả OA.
 router.post("/followers/send", authenticate, requireSendPermission(), async (req, res, next) => {
   try {
-    const { userIds = [], message } = req.body;
+    const { userIds = [], message, notificationId } = req.body;
     if (!Array.isArray(userIds) || userIds.length === 0) return fail(res, "Cần chọn ít nhất 1 follower (userIds)");
-    if (!message || !message.trim()) return fail(res, "Nội dung không được để trống");
-    const results = await ZaloService.sendToFollowers(userIds, message.trim());
+    let text = message ? message.trim() : "";
+    let attachments = [];
+    // Nếu gửi từ "Soạn thông báo": lấy tiêu đề/nội dung/đính kèm từ notification
+    if (notificationId) {
+      const notif = await NotificationRepo.findById(notificationId);
+      if (notif) {
+        text = `📢 ${notif.tieuDe}\n\n${notif.noiDung}`;
+        attachments = notif.attachments || [];
+      }
+    }
+    if (!text) return fail(res, "Nội dung không được để trống");
+    const results = await ZaloService.sendToFollowers(userIds, text, attachments);
     const sent = results.filter((r) => r.sent).length;
     ok(res, { sent, failed: results.length - sent, results }, `Đã gửi ${sent}/${results.length}`);
   } catch (err) { next(err); }

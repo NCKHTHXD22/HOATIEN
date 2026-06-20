@@ -52,11 +52,11 @@ router.get("/notifications", authenticate, async (req, res, next) => {
 // POST /api/notify/notifications
 router.post("/notifications", authenticate, requireRole(...SENDER_ROLES), async (req, res, next) => {
   try {
-    const { tieuDe, noiDung, kenhGui = [], memberIds = [], groupIds = [] } = req.body;
+    const { tieuDe, noiDung, kenhGui = [], memberIds = [], groupIds = [], followerIds = [] } = req.body;
     if (!tieuDe || !noiDung) return fail(res, "Tiêu đề và nội dung là bắt buộc");
     if (kenhGui.length === 0) return fail(res, "Phải chọn ít nhất 1 kênh gửi");
-    if (memberIds.length === 0 && groupIds.length === 0) {
-      return fail(res, "Phải chọn ít nhất 1 người nhận hoặc nhóm");
+    if (memberIds.length === 0 && groupIds.length === 0 && followerIds.length === 0) {
+      return fail(res, "Phải chọn ít nhất 1 người nhận, nhóm hoặc follower");
     }
 
     const notif = await NotificationRepo.create({

@@ -9,6 +9,7 @@ import {
   scheduleNotification, cancelSchedule, getNotificationSends,
   confirmSend, addFeedback, uploadAttachment, getGroups, getMembers,
 } from '../services/notificationService'
+import { getFollowers, sendDirectMessage } from '../services/zaloService'
 import ZaloFollowersModal from '../components/ZaloFollowersModal'
 
 const STATUS_LABEL = {
@@ -40,10 +41,12 @@ function fmtDate(d) {
 
 // ── Modal Soạn thông báo ── (Redesigned — Quế Sơn style) ──
 function ComposeModal({ open, onClose, onDone }) {
-  const [form, setForm] = useState({ tieuDe: '', noiDung: '', kenhGui: [], memberIds: [], groupIds: [] })
+  const [form, setForm] = useState({ tieuDe: '', noiDung: '', kenhGui: [], memberIds: [], groupIds: [], followerIds: [] })
   const [groups, setGroups] = useState([])
   const [members, setMembers] = useState([])
   const [memberSearch, setMemberSearch] = useState('')
+  const [followers, setFollowers] = useState([])
+  const [followerSearch, setFollowerSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [scheduleMode, setScheduleMode] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
@@ -63,10 +66,11 @@ function ComposeModal({ open, onClose, onDone }) {
 
   useEffect(() => {
     if (!open) return
-    setForm({ tieuDe: '', noiDung: '', kenhGui: [], memberIds: [], groupIds: [] })
+    setForm({ tieuDe: '', noiDung: '', kenhGui: [], memberIds: [], groupIds: [], followerIds: [] })
     setImgPreviews([]); setOtherFiles([])
-    setScheduleMode(false); setScheduledAt(''); setToast(null)
+    setScheduleMode(false); setScheduledAt(''); setToast(null); setFollowerSearch('')
     getGroups().then(r => setGroups(r.data || [])).catch(() => {})
+    getFollowers().then(r => setFollowers(r.data?.data?.followers || [])).catch(() => {})
   }, [open])
 
   useEffect(() => {
@@ -97,6 +101,12 @@ function ComposeModal({ open, onClose, onDone }) {
       memberIds: f.memberIds.includes(id) ? f.memberIds.filter(m => m !== id) : [...f.memberIds, id],
     }))
 
+  const toggleFollower = (id) =>
+    setForm(f => ({
+      ...f,
+      followerIds: f.followerIds.includes(id) ? f.followerIds.filter(x => x !== id) : [...f.followerIds, id],
+    }))
+
   function handleImageFiles(files) {
     const imgs = Array.from(files)
       .filter(f => f.type.startsWith('image/'))
@@ -113,7 +123,7 @@ function ComposeModal({ open, onClose, onDone }) {
   const handleSave = async () => {
     if (!form.tieuDe.trim() || !form.noiDung.trim()) return showToast('error', 'Nhập tiêu đề và nội dung')
     if (form.kenhGui.length === 0) return showToast('error', 'Chọn ít nhất 1 kênh gửi')
-    if (form.memberIds.length === 0 && form.groupIds.length === 0) return showToast('error', 'Chọn ít nhất 1 người nhận hoặc nhóm')
+    if (form.memberIds.length === 0 && form.groupIds.length === 0 && form.followerIds.length === 0) return showToast('error', 'Chọn ít nhất 1 người nhận, nhóm hoặc follower')
     setLoading(true)
     try {
       const res = await createNotification(form)
@@ -122,7 +132,12 @@ function ComposeModal({ open, onClose, onDone }) {
       for (const file of allFiles) {
         await uploadAttachment(id, file).catch(() => {})
       }
-      if (scheduleMode && scheduledAt) {
+      const hasMemberRecipients = form.memberIds.length > 0 || form.groupIds.length > 0
+      // Gửi cho follower Zalo (kèm tiêu đề/nội dung/đính kèm) — gửi ngay
+      if (form.followerIds.length > 0) {
+        await sendDirectMessage({ userIds: form.followerIds, notificationId: id }).catch(() => {})
+      }
+      if (scheduleMode && scheduledAt && hasMemberRecipients) {
         await scheduleNotification(id, scheduledAt)
         showToast('success', 'Đã lưu và lên lịch gửi thành công!')
       } else {
@@ -138,7 +153,7 @@ function ComposeModal({ open, onClose, onDone }) {
   if (!open) return null
 
   const totalAttach = imgPreviews.length + otherFiles.length
-  const totalRecipients = form.groupIds.length + form.memberIds.length
+  const totalRecipients = form.groupIds.length + form.memberIds.length + form.followerIds.length
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -314,8 +329,9 @@ function ComposeModal({ open, onClose, onDone }) {
                 {/* Tab nhóm / cá nhân */}
                 <div className="flex gap-1 rounded-xl bg-gray-100 p-1 mb-3">
                   {[
-                    { id: 'nhom',   label: 'Theo nhóm' },
-                    { id: 'canhan', label: 'Cá nhân'   },
+                    { id: 'nhom',     label: 'Theo nhóm' },
+                    { id: 'canhan',   label: 'Cá nhân'   },
+                    { id: 'follower', label: 'Follower Zalo' },
                   ].map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
                       className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-all ${
@@ -376,12 +392,52 @@ function ComposeModal({ open, onClose, onDone }) {
                   </div>
                 )}
 
+                {tab === 'follower' && (
+                  <div>
+                    <div className="relative mb-2">
+                      <Search size={13} className="absolute left-3 top-2.5 text-gray-400" />
+                      <input
+                        className="w-full border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                        placeholder="Tìm follower theo tên hoặc UserID..."
+                        value={followerSearch}
+                        onChange={e => setFollowerSearch(e.target.value)}
+                      />
+                    </div>
+                    <div className="max-h-36 overflow-y-auto rounded-xl border divide-y">
+                      {followers.length === 0
+                        ? <p className="text-center text-sm text-gray-400 py-4">Chưa có follower. Bấm "Đồng bộ" ở "Quản lý danh bạ Zalo"</p>
+                        : followers
+                            .filter(f => {
+                              const q = followerSearch.toLowerCase()
+                              return !q || (f.displayName || '').toLowerCase().includes(q) || (f.userId || '').includes(q)
+                            })
+                            .slice(0, 50)
+                            .map(f => (
+                              <label key={f.userId}
+                                className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition-colors ${form.followerIds.includes(f.userId) ? 'bg-blue-50/50' : ''}`}
+                              >
+                                <input type="checkbox" checked={form.followerIds.includes(f.userId)} onChange={() => toggleFollower(f.userId)} className="rounded" />
+                                <div className="h-7 w-7 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xs font-bold shrink-0 overflow-hidden">
+                                  {f.avatar ? <img src={f.avatar} alt="" className="h-full w-full object-cover" /> : (f.displayName || '?')[0]?.toUpperCase()}
+                                </div>
+                                <span className="text-sm flex-1">{f.displayName || '(Chưa có tên)'}</span>
+                                {f.linkedMemberId && <span className="text-[10px] text-green-600">✓ liên kết</span>}
+                              </label>
+                            ))
+                      }
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">Follower chỉ nhận qua Zalo, và chỉ tới được người đã nhắn OA trong 48h.</p>
+                  </div>
+                )}
+
                 {totalRecipients > 0 && (
                   <p className="text-xs text-blue-600 mt-1.5 font-medium">
                     Đã chọn:{' '}
                     {form.groupIds.length > 0 && `${form.groupIds.length} nhóm`}
                     {form.groupIds.length > 0 && form.memberIds.length > 0 && ', '}
                     {form.memberIds.length > 0 && `${form.memberIds.length} cá nhân`}
+                    {(form.groupIds.length > 0 || form.memberIds.length > 0) && form.followerIds.length > 0 && ', '}
+                    {form.followerIds.length > 0 && `${form.followerIds.length} follower`}
                   </p>
                 )}
               </div>

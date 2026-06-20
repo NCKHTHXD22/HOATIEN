@@ -312,11 +312,11 @@ function startSyncFollowers() {
 const isSyncing = () => _syncing;
 
 // Gửi 1 tin tới nhiều follower (theo user_id). Trả về kết quả từng người.
-async function sendToFollowers(userIds, text) {
+async function sendToFollowers(userIds, text, attachments = []) {
   const results = [];
   for (const userId of userIds) {
     try {
-      await sendMessage(userId, text);
+      await sendMessage(userId, text, attachments);
       results.push({ userId, sent: true });
     } catch (e) {
       results.push({ userId, sent: false, error: e.message });
