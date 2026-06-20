@@ -41,6 +41,10 @@ const findAll = () => ZaloFollower.find().sort({ displayName: 1 }).lean();
 const findByUserId = (userId) => ZaloFollower.findOne({ userId }).lean();
 
 const setLink = (userId, memberId) =>
-  ZaloFollower.findOneAndUpdate({ userId }, { linkedMemberId: memberId }, { new: true });
+  ZaloFollower.findOneAndUpdate(
+    { userId },
+    { $set: { linkedMemberId: memberId }, $setOnInsert: { displayName: "", avatar: "" } },
+    { new: true, upsert: true }
+  );
 
 module.exports = { upsertMany, upsertIds, findAll, findByUserId, setLink };

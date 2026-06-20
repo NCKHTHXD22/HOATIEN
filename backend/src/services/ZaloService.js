@@ -55,6 +55,7 @@ async function handleMessage(zaloUserId, text) {
       state: nextState, queryType: queryType || session.queryType,
       lastQuery: query.value, resultCount: results.length,
     });
+    await _autoLink(zaloUserId, query);
   } else {
     await ZaloSessionRepo.updateState(zaloUserId, {
       state: nextState,
@@ -101,6 +102,29 @@ async function _pgLikeFallback(name) {
     include: { members: true, village: true },
     take: 20,
   });
+}
+
+// Tự động liên kết follower Zalo ↔ nhân khẩu khi dân tra cứu chính họ (CCCD/SĐT khớp DUY NHẤT).
+async function _autoLink(zaloUserId, query) {
+  try {
+    let member = null;
+    if (query.type === "cccd") {
+      member = await MemberRepo.findByCCCD(query.value);
+    } else if (query.type === "sdt") {
+      const members = await MemberRepo.findBySdt(query.value);
+      if (members.length === 1) member = members[0]; // chỉ link khi SĐT khớp đúng 1 người
+    }
+    if (!member) return;
+    // KHÔNG ghi đè nếu nhân khẩu đã gán cho userId khác
+    if (member.zaloUserId && member.zaloUserId !== zaloUserId) return;
+    if (member.zaloUserId !== zaloUserId) {
+      await MemberRepo.update(member.id, { zaloUserId });
+    }
+    await ZaloFollowerRepo.setLink(zaloUserId, member.id);
+    logger.info(`Auto-link Zalo ${zaloUserId} -> member ${member.id} (${member.hoTen}) via ${query.type}`);
+  } catch (e) {
+    logger.warn(`Auto-link failed [${zaloUserId}]: ${e.message}`);
+  }
 }
 
 async function _sendZaloMessage(toUserId, text, token) {
