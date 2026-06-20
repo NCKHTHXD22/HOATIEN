@@ -9,6 +9,7 @@ import {
   scheduleNotification, cancelSchedule, getNotificationSends,
   confirmSend, addFeedback, uploadAttachment, getGroups, getMembers,
 } from '../services/notificationService'
+import ZaloFollowersModal from '../components/ZaloFollowersModal'
 
 const STATUS_LABEL = {
   NHAP: { label: 'Nháp', color: 'bg-gray-100 text-gray-600' },
@@ -552,6 +553,7 @@ export default function ThongBao() {
   const [loading, setLoading] = useState(false)
   const [composeOpen, setComposeOpen] = useState(false)
   const [sendsModal, setSendsModal] = useState(null) // { id, title }
+  const [zaloModalOpen, setZaloModalOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -596,12 +598,20 @@ export default function ThongBao() {
           <h1 className="text-2xl font-bold text-gray-900">Thông Báo</h1>
           <p className="text-sm text-gray-500 mt-1">Soạn và gửi thông báo đến người dân qua Zalo, Email, SMS</p>
         </div>
-        <button
-          onClick={() => setComposeOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
-        >
-          <Plus size={16} /> Soạn thông báo
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setZaloModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-blue-200 text-blue-700 bg-blue-50 text-sm font-medium rounded-lg hover:bg-blue-100"
+          >
+            <MessageSquare size={16} /> Quản lý danh bạ Zalo
+          </button>
+          <button
+            onClick={() => setComposeOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+          >
+            <Plus size={16} /> Soạn thông báo
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -730,6 +740,7 @@ export default function ThongBao() {
           onClose={() => setSendsModal(null)}
         />
       )}
+      <ZaloFollowersModal open={zaloModalOpen} onClose={() => setZaloModalOpen(false)} />
     </div>
   )
 }

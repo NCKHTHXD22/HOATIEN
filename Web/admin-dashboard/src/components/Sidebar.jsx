@@ -28,7 +28,6 @@ const navGroups = [
     label: 'Thông báo',
     items: [
       { to: '/thong-bao',  icon: Bell,          label: 'Soạn & Gửi thông báo' },
-      { to: '/zalo-followers', icon: MessageCircle, label: 'Gửi tin Zalo trực tiếp' },
       { to: '/nguoi-nhan', icon: UserRound,      label: 'Người nhận / Nhóm' },
       { to: '/khao-sat',   icon: ClipboardList,  label: 'Khảo sát nhanh' },
       { to: '/bao-cao-tb', icon: PieChart,       label: 'Báo cáo hiệu quả' },
