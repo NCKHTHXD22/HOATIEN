@@ -79,6 +79,13 @@ export default function HoSo() {
   const [movErr, setMovErr]       = useState('')
   const [movSaving, setMovSaving] = useState(false)
 
+  /* Movement edit modal (UC08/09) */
+  const [showMovEdit, setShowMovEdit]   = useState(false)
+  const [editMovId, setEditMovId]       = useState(null)
+  const [editMovForm, setEditMovForm]   = useState({ loai: 'MOVE_IN', ngay: '', nguonGoc: '', noiDen: '', ghiChu: '' })
+  const [editMovErr, setEditMovErr]     = useState('')
+  const [editMovSaving, setEditMovSaving] = useState(false)
+
   /* Split modal (UC05) */
   const [showSplit, setShowSplit]       = useState(false)
   const [splitSelected, setSplitSel]   = useState([])
@@ -238,6 +245,32 @@ export default function HoSo() {
       await reloadDetail()
     } catch (e) { setMovErr(e.response?.data?.message || 'Ghi nhận thất bại') }
     finally { setMovSaving(false) }
+  }
+
+  const openMovEdit = mv => {
+    setEditMovId(mv.id)
+    setEditMovForm({
+      loai: mv.loai,
+      ngay: mv.ngay?.slice(0, 10) || '',
+      nguonGoc: mv.nguonGoc || '',
+      noiDen: mv.noiDen || '',
+      ghiChu: mv.ghiChu || '',
+    })
+    setEditMovErr(''); setShowMovEdit(true)
+  }
+  const handleMovEdit = async () => {
+    setEditMovSaving(true); setEditMovErr('')
+    try {
+      await movementService.update(editMovId, editMovForm)
+      setShowMovEdit(false)
+      await reloadDetail()
+    } catch (e) { setEditMovErr(e.response?.data?.message || 'Cập nhật thất bại') }
+    finally { setEditMovSaving(false) }
+  }
+  const handleDeleteMov = async mv => {
+    if (!window.confirm('Xóa bản ghi biến động này?')) return
+    try { await movementService.remove(mv.id); await reloadDetail() }
+    catch (e) { alert(e.response?.data?.message || 'Xóa thất bại') }
   }
 
   /* ── Split (UC05) ── */
@@ -467,6 +500,10 @@ export default function HoSo() {
                         <p className="text-[11px] text-muted-foreground">{new Date(mv.ngay).toLocaleDateString('vi-VN')} {mv.nguonGoc ? `· Từ: ${mv.nguonGoc}` : ''} {mv.noiDen ? `· Đến: ${mv.noiDen}` : ''}</p>
                         {mv.ghiChu && <p className="text-[11px] text-muted-foreground">{mv.ghiChu}</p>}
                       </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => openMovEdit(mv)} className="p-1.5 rounded hover:bg-card text-muted-foreground hover:text-amber-500 transition-colors" title="Chỉnh sửa"><Pencil size={12} /></button>
+                        <button onClick={() => handleDeleteMov(mv)} className="p-1.5 rounded hover:bg-card text-muted-foreground hover:text-destructive transition-colors" title="Xóa"><Trash2 size={12} /></button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -520,6 +557,18 @@ export default function HoSo() {
         <FormInput label="Nơi chuyển từ (nguồn gốc)" placeholder="Quận Hải Châu, Đà Nẵng..." value={movForm.nguonGoc} onChange={e => setMovForm(f => ({ ...f, nguonGoc: e.target.value }))} />
         <FormInput label="Nơi chuyển đến" placeholder="Phường Hòa Thọ Đông..." value={movForm.noiDen} onChange={e => setMovForm(f => ({ ...f, noiDen: e.target.value }))} />
         <FormInput label="Ghi chú" placeholder="Thông tin bổ sung..." value={movForm.ghiChu} onChange={e => setMovForm(f => ({ ...f, ghiChu: e.target.value }))} />
+      </Modal>
+
+      {/* ══ Modal Sửa biến động (UC08/09) ══ */}
+      <Modal title="Chỉnh sửa biến động" open={showMovEdit} onClose={() => setShowMovEdit(false)}
+        footer={<><SecondaryBtn onClick={() => setShowMovEdit(false)}>Hủy</SecondaryBtn><PrimaryBtn onClick={handleMovEdit} disabled={editMovSaving}>{editMovSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</PrimaryBtn></>}>
+        {editMovErr && <ErrBox msg={editMovErr} />}
+        <Select label="Loại biến động" value={editMovForm.loai} onChange={v => setEditMovForm(f => ({ ...f, loai: v }))}
+          options={[{ value: 'MOVE_IN', label: 'Chuyển đến (Move In)' }, { value: 'MOVE_OUT', label: 'Chuyển đi (Move Out)' }]} />
+        <FormInput label="Ngày" type="date" required value={editMovForm.ngay} onChange={e => setEditMovForm(f => ({ ...f, ngay: e.target.value }))} />
+        <FormInput label="Nơi chuyển từ (nguồn gốc)" value={editMovForm.nguonGoc} onChange={e => setEditMovForm(f => ({ ...f, nguonGoc: e.target.value }))} />
+        <FormInput label="Nơi chuyển đến" value={editMovForm.noiDen} onChange={e => setEditMovForm(f => ({ ...f, noiDen: e.target.value }))} />
+        <FormInput label="Ghi chú" value={editMovForm.ghiChu} onChange={e => setEditMovForm(f => ({ ...f, ghiChu: e.target.value }))} />
       </Modal>
 
       {/* ══ Modal Tách hộ (UC05) ══ */}
