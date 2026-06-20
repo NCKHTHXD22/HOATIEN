@@ -1,6 +1,7 @@
 const axios = require("axios").default;
 const ZaloSessionRepo = require("../repositories/mongo/ZaloSessionRepo");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
+const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const SearchService = require("./SearchService");
 const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
@@ -105,7 +106,7 @@ async function _pgLikeFallback(name) {
 async function _sendZaloMessage(toUserId, text, token) {
   try {
     await axios.post(
-      "https://openapi.zalo.me/v3.0/oa/message/cs",
+      "https://openapi.zalo.me/v2.0/oa/message",
       { recipient: { user_id: toUserId }, message: { text } },
       { headers: { access_token: token } }
     );
@@ -117,7 +118,105 @@ async function _sendZaloMessage(toUserId, text, token) {
 async function sendMessage(zaloUserId, text) {
   const token = await ZaloConfigRepo.getValidToken();
   if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
-  await _sendZaloMessage(zaloUserId, text, token);
+  // Khác _sendZaloMessage (best-effort cho luồng tra cứu): ở đây phải NÉM lỗi
+  // để NotificationService đánh dấu FAILED chính xác.
+  const res = await axios.post(
+    "https://openapi.zalo.me/v2.0/oa/message",
+    { recipient: { user_id: zaloUserId }, message: { text } },
+    { headers: { access_token: token } }
+  );
+  if (res.data?.error && res.data.error !== 0) {
+    throw new Error(`Zalo error ${res.data.error}: ${res.data.message || "Gửi thất bại"}`);
+  }
+  return res.data;
 }
 
-module.exports = { handleMessage, sendMessage };
+// ─── Đồng bộ follower OA (mirror cách QUESON gọi Zalo API) ──────────────
+// GET có tự refresh token 1 lần khi gặp lỗi -216 (token hết hạn)
+async function _zaloGet(url) {
+  let token = await ZaloConfigRepo.getValidToken();
+  if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
+  let res = await axios.get(url, { headers: { access_token: token } });
+  if (res.data?.error === -216) {
+    token = await ZaloConfigRepo.refreshAccessToken();
+    if (token) res = await axios.get(url, { headers: { access_token: token } });
+  }
+  return res.data;
+}
+
+async function _fetchAllFollowerIds() {
+  const ids = [];
+  let offset = 0;
+  const count = 50;
+  while (true) {
+    const data = encodeURIComponent(JSON.stringify({ offset, count }));
+    const result = await _zaloGet(`https://openapi.zalo.me/v2.0/oa/getfollowers?data=${data}`);
+    if (result?.error !== 0) {
+      logger.error(`Zalo getfollowers error ${result?.error}: ${result?.message}`);
+      break;
+    }
+    const followers = result?.data?.followers || [];
+    for (const f of followers) ids.push(f.user_id);
+    if (followers.length < count) break;
+    offset += count;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return ids;
+}
+
+async function _getFollowerProfile(userId) {
+  // user_id phải là SỐ không ngoặc kép, nếu không Zalo trả -201 "user_id is not valid"
+  const data = encodeURIComponent(`{"user_id":${userId}}`);
+  const result = await _zaloGet(`https://openapi.zalo.me/v2.0/oa/getprofile?data=${data}`);
+  if (result?.error !== 0) return { user_id: userId, display_name: "", avatar: "" };
+  return {
+    user_id: userId,
+    display_name: result?.data?.display_name || "",
+    avatar: result?.data?.avatar || "",
+  };
+}
+
+let _syncing = false;
+
+async function _runSyncFollowers() {
+  const ids = await _fetchAllFollowerIds();
+  // Lưu user_id ngay để follower xuất hiện liền (tên rỗng), không ghi đè tên cũ
+  await ZaloFollowerRepo.upsertIds(ids);
+  // Điền tên/avatar dần (chậm vì Zalo giới hạn tốc độ getprofile)
+  for (const userId of ids) {
+    const p = await _getFollowerProfile(userId).catch(() => null);
+    if (p && p.display_name) await ZaloFollowerRepo.upsertMany([p]);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  logger.info(`Zalo followers synced: ${ids.length}`);
+  return ids.length;
+}
+
+// Chạy NỀN: trả về ngay để tránh nginx 504 khi OA có nhiều follower
+function startSyncFollowers() {
+  if (_syncing) return { running: true };
+  _syncing = true;
+  _runSyncFollowers()
+    .catch((e) => logger.error(`syncFollowers: ${e.message}`))
+    .finally(() => { _syncing = false; });
+  return { started: true };
+}
+
+const isSyncing = () => _syncing;
+
+// Gửi 1 tin tới nhiều follower (theo user_id). Trả về kết quả từng người.
+async function sendToFollowers(userIds, text) {
+  const results = [];
+  for (const userId of userIds) {
+    try {
+      await sendMessage(userId, text);
+      results.push({ userId, sent: true });
+    } catch (e) {
+      results.push({ userId, sent: false, error: e.message });
+    }
+    await new Promise((r) => setTimeout(r, 200)); // tránh rate limit
+  }
+  return results;
+}
+
+module.exports = { handleMessage, sendMessage, startSyncFollowers, isSyncing, sendToFollowers };

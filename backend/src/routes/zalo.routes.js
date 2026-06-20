@@ -2,8 +2,10 @@ const router = require("express").Router();
 const axios = require("axios").default;
 const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
+const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
+const MemberRepo = require("../repositories/pg/MemberRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
-const { authenticate, requireRole } = require("../middlewares/auth.middleware");
+const { authenticate, requireRole, requireSendPermission } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
 const env = require("../config/env");
 const logger = require("../utils/logger");
@@ -128,6 +130,64 @@ router.get("/callback", async (req, res) => {
     logger.error(`Zalo callback error: ${err.message}`);
     res.status(500).send(`<h2 style="color:red">Lỗi server: ${err.message}</h2>`);
   }
+});
+
+// POST /api/zalo/followers/sync — bắt đầu đồng bộ follower từ OA (chạy nền, admin)
+router.post("/followers/sync", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
+  try {
+    const r = ZaloService.startSyncFollowers();
+    if (r.running) return ok(res, r, "Đang đồng bộ rồi, vui lòng đợi...");
+    ok(res, r, "Đã bắt đầu đồng bộ (tên cập nhật dần). Xem ở GET /followers.");
+  } catch (err) { next(err); }
+});
+
+// GET /api/zalo/followers — danh sách follower đã đồng bộ + tiến độ (admin)
+router.get("/followers", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
+  try {
+    const followers = await ZaloFollowerRepo.findAll();
+    ok(res, { syncing: ZaloService.isSyncing(), total: followers.length, followers });
+  } catch (err) { next(err); }
+});
+
+// POST /api/zalo/followers/send — gửi 1 tin tới các follower được chọn (cần quyền gửi)
+// Bắt buộc liệt kê userIds rõ ràng — KHÔNG có "gửi tất cả" để tránh bắn nhầm cả OA.
+router.post("/followers/send", authenticate, requireSendPermission(), async (req, res, next) => {
+  try {
+    const { userIds = [], message } = req.body;
+    if (!Array.isArray(userIds) || userIds.length === 0) return fail(res, "Cần chọn ít nhất 1 follower (userIds)");
+    if (!message || !message.trim()) return fail(res, "Nội dung không được để trống");
+    const results = await ZaloService.sendToFollowers(userIds, message.trim());
+    const sent = results.filter((r) => r.sent).length;
+    ok(res, { sent, failed: results.length - sent, results }, `Đã gửi ${sent}/${results.length}`);
+  } catch (err) { next(err); }
+});
+
+// POST /api/zalo/followers/:userId/link — liên kết tài khoản Zalo với Nhân khẩu
+router.post("/followers/:userId/link", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { memberId } = req.body; // có thể null để hủy liên kết
+    
+    const follower = await ZaloFollowerRepo.findByUserId(userId);
+    if (!follower) return fail(res, "Không tìm thấy người theo dõi Zalo này");
+
+    // Nếu đã liên kết với ai đó trước đây, xóa liên kết cũ ở Postgres
+    if (follower.linkedMemberId) {
+      await MemberRepo.update(follower.linkedMemberId, { zaloUserId: null }).catch(() => {});
+    }
+
+    // Nếu có memberId mới, set vào Postgres
+    if (memberId) {
+      const member = await MemberRepo.findById(memberId);
+      if (!member) return fail(res, "Không tìm thấy hồ sơ nhân khẩu");
+      await MemberRepo.update(memberId, { zaloUserId: userId });
+    }
+
+    // Cập nhật Mongo
+    await ZaloFollowerRepo.setLink(userId, memberId || null);
+
+    ok(res, null, memberId ? "Đã ghép nối thành công" : "Đã hủy ghép nối thành công");
+  } catch (err) { next(err); }
 });
 
 // GET /api/zalo/events — xem log sự kiện (admin)

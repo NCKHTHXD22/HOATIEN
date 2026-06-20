@@ -114,6 +114,7 @@ model Household {
   lng         Float?
   trangThai   HoStatus         @default(ACTIVE)
   loaiHo      HoType           @default(THUONG_TRU)
+  soNhanKhau  Int?
   village     Village          @relation(fields: [villageId], references: [id])
   villageId   String
   members     Member[]
@@ -130,7 +131,7 @@ model Member {
   id              String                 @id @default(cuid())
   hoTen           String
   ngaySinh        DateTime?
-  gioiTinh        Gender
+  gioiTinh        Gender?
   cccd            String?                @unique
   sdt             String?
   email           String?

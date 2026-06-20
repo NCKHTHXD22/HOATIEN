@@ -33,6 +33,8 @@ const TAB_FILTER = {
 const COLUMNS    = ['Số HK', 'Địa chỉ', 'Thôn', 'Loại hộ', 'Nhân khẩu', 'Trạng thái', '']
 const EMPTY_HH   = { soHoKhau: '', diaChi: '', villageId: '', loaiHo: 'THUONG_TRU', trangThai: 'ACTIVE' }
 const EMPTY_MEM  = { hoTen: '', ngaySinh: '', gioiTinh: 'NAM', cccd: '', sdt: '', quanHeChuHo: '', laChuHo: false }
+const NO_INFO    = 'Không có thông tin'
+const GENDER_LABEL = { NAM: 'Nam', NU: 'Nữ', KHAC: 'Khác' }
 
 /* ══════════════════════════════════════════════════════════════ */
 export default function HoSo() {
@@ -440,8 +442,9 @@ export default function HoSo() {
                     <div key={m.id} className="flex items-center justify-between px-3 py-2.5 rounded-md bg-secondary border border-border">
                       <div>
                         <p className="text-sm font-semibold text-foreground">{m.hoTen} {m.laChuHo && <span className="ml-1 text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">Chủ hộ</span>}</p>
-                        <p className="text-xs text-muted-foreground">{m.quanHeChuHo} · {m.gioiTinh} {m.ngaySinh ? `· ${new Date(m.ngaySinh).toLocaleDateString('vi-VN')}` : ''}</p>
-                        {m.cccd && <p className="text-xs text-muted-foreground">CCCD: {m.cccd}</p>}
+                        <p className="text-xs text-muted-foreground">{m.quanHeChuHo} · {m.gioiTinh ? GENDER_LABEL[m.gioiTinh] : NO_INFO} · {m.ngaySinh ? new Date(m.ngaySinh).toLocaleDateString('vi-VN') : NO_INFO}</p>
+                        <p className="text-xs text-muted-foreground">CCCD: {m.cccd || NO_INFO}</p>
+                        <p className="text-xs text-muted-foreground">SĐT: {m.sdt || NO_INFO}</p>
                       </div>
                       <button onClick={() => handleDeleteMem(m)} className="p-1.5 rounded hover:bg-card text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={13} /></button>
                     </div>
