@@ -2,6 +2,7 @@ const router = require("express").Router();
 const axios = require("axios").default;
 const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
+const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
@@ -128,6 +129,21 @@ router.get("/callback", async (req, res) => {
     logger.error(`Zalo callback error: ${err.message}`);
     res.status(500).send(`<h2 style="color:red">Lỗi server: ${err.message}</h2>`);
   }
+});
+
+// POST /api/zalo/followers/sync — đồng bộ danh sách follower từ OA (admin)
+router.post("/followers/sync", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
+  try {
+    const count = await ZaloService.syncFollowers();
+    ok(res, { count }, `Đã đồng bộ ${count} follower`);
+  } catch (err) { next(err); }
+});
+
+// GET /api/zalo/followers — danh sách follower đã đồng bộ (admin)
+router.get("/followers", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), async (req, res, next) => {
+  try {
+    ok(res, await ZaloFollowerRepo.findAll());
+  } catch (err) { next(err); }
 });
 
 // GET /api/zalo/events — xem log sự kiện (admin)

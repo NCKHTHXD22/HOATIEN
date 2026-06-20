@@ -1,6 +1,7 @@
 const axios = require("axios").default;
 const ZaloSessionRepo = require("../repositories/mongo/ZaloSessionRepo");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
+const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
 const SearchService = require("./SearchService");
 const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
@@ -130,4 +131,64 @@ async function sendMessage(zaloUserId, text) {
   return res.data;
 }
 
-module.exports = { handleMessage, sendMessage };
+// ─── Đồng bộ follower OA (mirror cách QUESON gọi Zalo API) ──────────────
+// GET có tự refresh token 1 lần khi gặp lỗi -216 (token hết hạn)
+async function _zaloGet(url) {
+  let token = await ZaloConfigRepo.getValidToken();
+  if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
+  let res = await axios.get(url, { headers: { access_token: token } });
+  if (res.data?.error === -216) {
+    token = await ZaloConfigRepo.refreshAccessToken();
+    if (token) res = await axios.get(url, { headers: { access_token: token } });
+  }
+  return res.data;
+}
+
+async function _fetchAllFollowerIds() {
+  const ids = [];
+  let offset = 0;
+  const count = 50;
+  while (true) {
+    const data = encodeURIComponent(JSON.stringify({ offset, count }));
+    const result = await _zaloGet(`https://openapi.zalo.me/v2.0/oa/getfollowers?data=${data}`);
+    if (result?.error !== 0) {
+      logger.error(`Zalo getfollowers error ${result?.error}: ${result?.message}`);
+      break;
+    }
+    const followers = result?.data?.followers || [];
+    for (const f of followers) ids.push(f.user_id);
+    if (followers.length < count) break;
+    offset += count;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return ids;
+}
+
+async function _getFollowerProfile(userId) {
+  // user_id phải là SỐ không ngoặc kép, nếu không Zalo trả -201 "user_id is not valid"
+  const data = encodeURIComponent(`{"user_id":${userId}}`);
+  const result = await _zaloGet(`https://openapi.zalo.me/v2.0/oa/getprofile?data=${data}`);
+  if (result?.error !== 0) return { user_id: userId, display_name: "", avatar: "" };
+  return {
+    user_id: userId,
+    display_name: result?.data?.display_name || "",
+    avatar: result?.data?.avatar || "",
+  };
+}
+
+async function syncFollowers() {
+  const ids = await _fetchAllFollowerIds();
+  const profiles = [];
+  for (const userId of ids) {
+    const profile = await _getFollowerProfile(userId).catch(() => ({
+      user_id: userId, display_name: "", avatar: "",
+    }));
+    profiles.push(profile);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  await ZaloFollowerRepo.upsertMany(profiles);
+  logger.info(`Zalo followers synced: ${profiles.length}`);
+  return profiles.length;
+}
+
+module.exports = { handleMessage, sendMessage, syncFollowers };
