@@ -15,7 +15,6 @@ import ThongBao from './pages/ThongBao'
 import NguoiNhan from './pages/NguoiNhan'
 import KhaoSat from './pages/KhaoSat'
 import BaoCaoThongBao from './pages/BaoCaoThongBao'
-import ZaloFollowers from './pages/ZaloFollowers'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -48,7 +47,6 @@ function AppRoutes() {
         <Route path="nguoi-nhan"     element={<NguoiNhan />} />
         <Route path="khao-sat"       element={<KhaoSat />} />
         <Route path="bao-cao-tb"     element={<BaoCaoThongBao />} />
-        <Route path="zalo-followers" element={<ZaloFollowers />} />
       </Route>
     </Routes>
   )
