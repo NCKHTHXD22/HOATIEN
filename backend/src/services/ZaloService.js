@@ -204,4 +204,19 @@ function startSyncFollowers() {
 
 const isSyncing = () => _syncing;
 
-module.exports = { handleMessage, sendMessage, startSyncFollowers, isSyncing };
+// Gửi 1 tin tới nhiều follower (theo user_id). Trả về kết quả từng người.
+async function sendToFollowers(userIds, text) {
+  const results = [];
+  for (const userId of userIds) {
+    try {
+      await sendMessage(userId, text);
+      results.push({ userId, sent: true });
+    } catch (e) {
+      results.push({ userId, sent: false, error: e.message });
+    }
+    await new Promise((r) => setTimeout(r, 200)); // tránh rate limit
+  }
+  return results;
+}
+
+module.exports = { handleMessage, sendMessage, startSyncFollowers, isSyncing, sendToFollowers };

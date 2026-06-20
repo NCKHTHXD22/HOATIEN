@@ -4,7 +4,7 @@ const ZaloService = require("../services/ZaloService");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
-const { authenticate, requireRole } = require("../middlewares/auth.middleware");
+const { authenticate, requireRole, requireSendPermission } = require("../middlewares/auth.middleware");
 const { ok, fail } = require("../utils/response");
 const env = require("../config/env");
 const logger = require("../utils/logger");
@@ -145,6 +145,19 @@ router.get("/followers", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE
   try {
     const followers = await ZaloFollowerRepo.findAll();
     ok(res, { syncing: ZaloService.isSyncing(), total: followers.length, followers });
+  } catch (err) { next(err); }
+});
+
+// POST /api/zalo/followers/send — gửi 1 tin tới các follower được chọn (cần quyền gửi)
+// Bắt buộc liệt kê userIds rõ ràng — KHÔNG có "gửi tất cả" để tránh bắn nhầm cả OA.
+router.post("/followers/send", authenticate, requireSendPermission(), async (req, res, next) => {
+  try {
+    const { userIds = [], message } = req.body;
+    if (!Array.isArray(userIds) || userIds.length === 0) return fail(res, "Cần chọn ít nhất 1 follower (userIds)");
+    if (!message || !message.trim()) return fail(res, "Nội dung không được để trống");
+    const results = await ZaloService.sendToFollowers(userIds, message.trim());
+    const sent = results.filter((r) => r.sent).length;
+    ok(res, { sent, failed: results.length - sent, results }, `Đã gửi ${sent}/${results.length}`);
   } catch (err) { next(err); }
 });
 
