@@ -598,7 +598,6 @@ export default function ThongBao() {
           <h1 className="text-2xl font-bold text-gray-900">Thông Báo</h1>
           <p className="text-sm text-gray-500 mt-1">Soạn và gửi thông báo đến người dân qua Zalo, Email, SMS</p>
         </div>
-        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setZaloModalOpen(true)}
