@@ -115,6 +115,36 @@ async function _sendZaloMessage(toUserId, text, token) {
   }
 }
 
+// URL tuyệt đối cho file trong /uploads (Zalo tải qua URL public của backend)
+function _absUrl(url) {
+  if (!url) return url;
+  return url.startsWith("/") ? "https://api.dxvtech.vn" + encodeURI(url) : url;
+}
+
+// Upload 1 file tài liệu lên Zalo OA -> trả token (mirror QUESON).
+// Tải file từ URL public của backend về buffer rồi upload multipart (dễ retry khi -216).
+async function _uploadFileToZalo(fileUrl, originalName) {
+  const FormData = require("form-data");
+  const resp = await axios.get(fileUrl, { responseType: "arraybuffer" });
+  const buffer = Buffer.from(resp.data);
+  const doUpload = (token) => {
+    const form = new FormData();
+    form.append("file", buffer, { filename: originalName || "file" });
+    return axios.post("https://openapi.zalo.me/v2.0/oa/upload/file", form, {
+      headers: { ...form.getHeaders(), access_token: token },
+    });
+  };
+  let res = await doUpload(await ZaloConfigRepo.getValidToken());
+  if (res.data?.error === -216) {
+    const nt = await ZaloConfigRepo.refreshAccessToken();
+    if (nt) res = await doUpload(nt);
+  }
+  if (res.data?.error !== 0) {
+    throw new Error(`Zalo upload file error ${res.data?.error}: ${res.data?.message}`);
+  }
+  return res.data.data.token;
+}
+
 async function sendMessage(zaloUserId, text, attachments = []) {
   const token = await ZaloConfigRepo.getValidToken();
   if (!token) throw new Error("Zalo OA chưa được cấu hình access token");
@@ -163,6 +193,24 @@ async function sendMessage(zaloUserId, text, attachments = []) {
   if (res.data?.error && res.data.error !== 0) {
     throw new Error(`Zalo error ${res.data.error}: ${res.data.message || "Gửi thất bại"}`);
   }
+
+  // Gửi file tài liệu (pdf/docx/xlsx...) — mỗi file 1 message riêng (Zalo không gộp với text)
+  const docs = (attachments || []).filter(
+    (a) => a.url && a.loai !== "IMAGE" && !(a.tenFile && a.tenFile.match(/\.(jpg|jpeg|png|gif)$/i))
+  );
+  for (const f of docs) {
+    const fileToken = await _uploadFileToZalo(_absUrl(f.url), f.tenFile);
+    const t2 = await ZaloConfigRepo.getValidToken();
+    const fr = await axios.post(
+      "https://openapi.zalo.me/v2.0/oa/message",
+      { recipient: { user_id: zaloUserId }, message: { attachment: { type: "file", payload: { token: fileToken } } } },
+      { headers: { access_token: t2 } }
+    );
+    if (fr.data?.error && fr.data.error !== 0) {
+      throw new Error(`Zalo file error ${fr.data.error}: ${fr.data.message || "Gửi file thất bại"}`);
+    }
+  }
+
   return res.data;
 }
 
