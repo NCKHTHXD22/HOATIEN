@@ -9,6 +9,8 @@ const fail = (res, msg, code = 400) => res.status(code).json({ error: msg });
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const ZaloService = require("../services/ZaloService");
 const ZaloGroup = require("../models/mongo/ZaloGroup");
+const ZaloGroupMember = require("../models/mongo/ZaloGroupMember");
+const zaloGmf = require("../utils/zaloGmf");
 const BroadcastLog = require("../models/mongo/BroadcastLog");
 const ScheduledBroadcast = require("../models/mongo/ScheduledBroadcast");
 const { sendToUsers, getJob } = require("../services/broadcastService");
@@ -38,29 +40,33 @@ router.post("/followers/sync", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Groups (nhóm Zalo theo group_id) ───────────────────────────────
+// ── Groups (nhóm Zalo) ─────────────────────────────────────────────
+async function listGroups() {
+  const docs = await ZaloGroup.find().sort({ name: 1 }).lean();
+  const counts = await ZaloGroupMember.aggregate([{ $group: { _id: "$groupId", n: { $sum: 1 } } }]);
+  const cmap = Object.fromEntries(counts.map((c) => [c._id, c.n]));
+  return docs.map((g) => ({ id: String(g._id), group_id: g.groupId, name: g.name, icon: g.icon || "📋", memberCount: cmap[g.groupId] || 0 }));
+}
+
 router.get("/groups", async (req, res, next) => {
-  try {
-    const docs = await ZaloGroup.find().sort({ name: 1 }).lean();
-    const groups = docs.map((g) => ({ group_id: g.groupId, name: g.name }));
-    ok(res, { groups, count: groups.length });
-  } catch (err) { next(err); }
+  try { ok(res, { groups: await listGroups() }); } catch (err) { next(err); }
 });
 
+// Liên kết nhóm có sẵn bằng group_id
 router.post("/groups", async (req, res, next) => {
   try {
-    const { group_id, name } = req.body;
+    const { group_id, name, icon } = req.body;
     if (!group_id || !group_id.trim()) return fail(res, "Cần group_id");
     await ZaloGroup.findOneAndUpdate(
       { groupId: group_id.trim() },
-      { $set: { name: (name || "").trim() || group_id.trim() } },
+      { $set: { name: (name || "").trim() || group_id.trim(), ...(icon && { icon }) } },
       { upsert: true }
     );
-    const docs = await ZaloGroup.find().sort({ name: 1 }).lean();
-    ok(res, { ok: true, groups: docs.map((g) => ({ group_id: g.groupId, name: g.name })), count: docs.length });
+    ok(res, { ok: true, groups: await listGroups() });
   } catch (err) { next(err); }
 });
 
+// Sửa nhóm (đổi group_id/tên) — dùng bởi tab Followers&Nhóm
 router.put("/groups/:id", async (req, res, next) => {
   try {
     const { group_id, name } = req.body;
@@ -71,16 +77,88 @@ router.put("/groups/:id", async (req, res, next) => {
       { $set: { name: (name || "").trim() || group_id.trim() } },
       { upsert: true }
     );
-    const docs = await ZaloGroup.find().sort({ name: 1 }).lean();
-    ok(res, { ok: true, groups: docs.map((g) => ({ group_id: g.groupId, name: g.name })), count: docs.length });
+    ok(res, { ok: true, groups: await listGroups() });
   } catch (err) { next(err); }
 });
 
+// Tạo nhóm Zalo MỚI từ follower (GMF — cần OA có quyền Group Messaging)
+router.post("/groups/create-zalo", requireSendPermission(), async (req, res, next) => {
+  try {
+    const { name, icon, members = [] } = req.body;
+    if (!name || !name.trim()) return fail(res, "Cần tên nhóm");
+    if (!Array.isArray(members) || members.length === 0) return fail(res, "Cần ít nhất 1 thành viên ban đầu (chuẩn Zalo)");
+    const memberIds = members.map((m) => m.userId || m.zaloUserId).filter(Boolean);
+    const groupId = await zaloGmf.createZaloGroup(name.trim(), memberIds, name.trim());
+    if (!groupId) return fail(res, "Zalo không trả về group_id", 500);
+    await ZaloGroup.findOneAndUpdate(
+      { groupId: String(groupId) },
+      { $set: { name: name.trim(), icon: icon || "📋" } },
+      { upsert: true }
+    );
+    for (const m of members) {
+      const uid = m.userId || m.zaloUserId;
+      if (!uid) continue;
+      await ZaloGroupMember.findOneAndUpdate(
+        { groupId: String(groupId), zaloUserId: String(uid) },
+        { $set: { displayName: m.displayName || "", avatar: m.avatar || "" } },
+        { upsert: true }
+      ).catch(() => {});
+    }
+    ok(res, { ok: true, group_id: groupId, groups: await listGroups() });
+  } catch (err) { next(err); }
+});
+
+// Xoá nhóm khỏi hệ thống (KHÔNG giải tán nhóm Zalo thật) + xoá thành viên
 router.delete("/groups/:id", async (req, res, next) => {
   try {
-    await ZaloGroup.deleteOne({ groupId: req.params.id });
-    const docs = await ZaloGroup.find().sort({ name: 1 }).lean();
-    ok(res, { ok: true, groups: docs.map((g) => ({ group_id: g.groupId, name: g.name })), count: docs.length });
+    const id = req.params.id;
+    const isOid = /^[0-9a-fA-F]{24}$/.test(id);
+    const g = await ZaloGroup.findOne(isOid ? { _id: id } : { groupId: id });
+    const gid = g ? g.groupId : id;
+    await ZaloGroup.deleteOne({ groupId: gid });
+    await ZaloGroupMember.deleteMany({ groupId: gid });
+    ok(res, { ok: true, groups: await listGroups() });
+  } catch (err) { next(err); }
+});
+
+// ── Thành viên trong nhóm ──────────────────────────────────────────
+router.get("/groups/:groupId/members", async (req, res, next) => {
+  try {
+    const members = await ZaloGroupMember.find({ groupId: req.params.groupId }).lean();
+    res.json({ members: members.map((m) => ({ id: String(m._id), zaloUserId: m.zaloUserId, displayName: m.displayName, avatar: m.avatar })) });
+  } catch (err) { next(err); }
+});
+
+router.post("/groups/:groupId/members", async (req, res, next) => {
+  try {
+    const { zaloUserId, displayName, avatar } = req.body;
+    if (!zaloUserId) return fail(res, "Cần zaloUserId");
+    await ZaloGroupMember.findOneAndUpdate(
+      { groupId: req.params.groupId, zaloUserId: String(zaloUserId) },
+      { $set: { displayName: displayName || "", avatar: avatar || "" } },
+      { upsert: true }
+    );
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+router.delete("/groups/members/:memberId", async (req, res, next) => {
+  try { await ZaloGroupMember.findByIdAndDelete(req.params.memberId); res.json({ ok: true }); } catch (err) { next(err); }
+});
+
+// Đồng bộ thành viên từ Zalo (GMF listmember) -> ghi đè
+router.post("/groups/:groupId/members/sync", async (req, res, next) => {
+  try {
+    const { members } = await zaloGmf.getGroupMembersV3(req.params.groupId);
+    await ZaloGroupMember.deleteMany({ groupId: req.params.groupId });
+    let synced = 0;
+    for (const m of members) {
+      const uid = m.user_id || m.member_id || m.id;
+      if (!uid) continue;
+      await ZaloGroupMember.create({ groupId: req.params.groupId, zaloUserId: String(uid), displayName: m.display_name || "", avatar: m.avatar || "" }).catch(() => {});
+      synced++;
+    }
+    res.json({ ok: true, synced });
   } catch (err) { next(err); }
 });
 
