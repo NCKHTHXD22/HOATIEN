@@ -14,6 +14,7 @@ import ThonXom from './pages/ThonXom'
 import BienDong from './pages/BienDong'
 import MessagesPage from './pages/MessagesPage'
 import SettingsPage from './pages/SettingsPage'
+import SurveyFill from './pages/SurveyFill'
 import KhaoSat from './pages/KhaoSat'
 import BaoCaoThongBao from './pages/BaoCaoThongBao'
 
@@ -26,6 +27,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/ks/:id" element={<SurveyFill />} />
       <Route
         path="/"
         element={
