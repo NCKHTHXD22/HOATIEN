@@ -6,6 +6,9 @@ export const getAll = (params = {}) =>
 export const search = (q) =>
   api.get('/households/search', { params: { q } })
 
+export const getToList = (villageId) =>
+  api.get('/households/to-list', { params: { villageId } })
+
 export const getById = (id) => api.get(`/households/${id}`)
 
 export const getHistory = (id) => api.get(`/households/${id}/history`)

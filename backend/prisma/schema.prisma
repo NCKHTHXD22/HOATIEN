@@ -110,6 +110,7 @@ model Household {
   id          String           @id @default(cuid())
   soHoKhau    String           @unique
   diaChi      String
+  to          String?
   lat         Float?
   lng         Float?
   trangThai   HoStatus         @default(ACTIVE)

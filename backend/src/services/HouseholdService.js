@@ -11,18 +11,22 @@ async function getAll(filters) {
   return { data, total };
 }
 
+async function getDistinctTo(villageId) {
+  return HouseholdRepo.findDistinctTo(villageId);
+}
+
 async function getById(id) {
   const h = await HouseholdRepo.findById(id);
   if (!h) throw new Error("Không tìm thấy hộ dân");
   return h;
 }
 
-async function create({ soHoKhau, diaChi, lat, lng, trangThai, loaiHo, villageId, members = [] }, performedBy) {
+async function create({ soHoKhau, diaChi, to, lat, lng, trangThai, loaiHo, villageId, members = [] }, performedBy) {
   const exists = await HouseholdRepo.findBySoHoKhau(soHoKhau);
   if (exists) throw new Error("Số hộ khẩu đã tồn tại");
 
   const household = await HouseholdRepo.create(
-    { soHoKhau, diaChi, lat, lng, trangThai, loaiHo, villageId },
+    { soHoKhau, diaChi, to, lat, lng, trangThai, loaiHo, villageId },
     members.map(normalizeMember)
   );
 
@@ -220,4 +224,4 @@ async function mergeHouseholds({ targetId, sourceIds, ghiChu }, performedBy) {
   };
 }
 
-module.exports = { getAll, getById, create, update, remove, splitHousehold, mergeHouseholds };
+module.exports = { getAll, getDistinctTo, getById, create, update, remove, splitHousehold, mergeHouseholds };

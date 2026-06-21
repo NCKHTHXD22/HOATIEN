@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, Newspaper, FileText,
-  MessageSquareWarning, Users, BarChart3, Settings, Shield, LogOut, MapPin,
-  Bell, UserRound, ClipboardList, PieChart, MessageCircle, ArrowRightLeft,
+  MessageSquareWarning, Users, BarChart3, Settings, LogOut, MapPin,
+  Bell, UserRound, ClipboardList, PieChart, ArrowRightLeft,
 } from 'lucide-react'
 import clsx from 'clsx'
+import hoaTienLogo from '../assets/hoa-tien-logo.jpg'
 
 const navGroups = [
   {
@@ -60,11 +61,8 @@ export default function Sidebar({ open }) {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/[.07]">
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', boxShadow: '0 4px 14px rgba(59,130,246,.4)' }}
-        >
-          <Shield size={18} className="text-white" />
+        <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 border border-white/15">
+          <img src={hoaTienLogo} alt="Logo Hòa Tiến" className="w-full h-full object-cover" />
         </div>
         <div className="min-w-0">
           <p className="text-sm font-bold text-white truncate leading-tight">UBND Xã Hòa Tiến</p>

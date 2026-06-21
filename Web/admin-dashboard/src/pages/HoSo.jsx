@@ -30,8 +30,8 @@ const TAB_FILTER = {
   'Tạm trú':    { loaiHo: 'TAM_TRU' },
   'Tạm vắng':  { loaiHo: 'TAM_VANG' },
 }
-const COLUMNS    = ['Số HK', 'Địa chỉ', 'Thôn', 'Loại hộ', 'Nhân khẩu', 'Trạng thái', '']
-const EMPTY_HH   = { soHoKhau: '', diaChi: '', villageId: '', loaiHo: 'THUONG_TRU', trangThai: 'ACTIVE' }
+const COLUMNS    = ['Số HK', 'Địa chỉ', 'Thôn', 'Tổ', 'Loại hộ', 'Nhân khẩu', 'Trạng thái', '']
+const EMPTY_HH   = { soHoKhau: '', diaChi: '', to: '', villageId: '', loaiHo: 'THUONG_TRU', trangThai: 'ACTIVE' }
 const EMPTY_MEM  = { hoTen: '', ngaySinh: '', gioiTinh: 'NAM', cccd: '', sdt: '', quanHeChuHo: '', laChuHo: false }
 const NO_INFO    = 'Không có thông tin'
 const GENDER_LABEL = { NAM: 'Nam', NU: 'Nữ', KHAC: 'Khác' }
@@ -46,6 +46,9 @@ export default function HoSo() {
   const [stats, setStats]       = useState({ all: 0, thuongTru: 0, tamTru: 0, tamVang: 0 })
   const [loading, setLoading]   = useState(true)
   const [villages, setVillages] = useState([])
+  const [villageFilter, setVillageFilter] = useState('')
+  const [toFilter, setToFilter] = useState('')
+  const [toOptions, setToOptions] = useState([])
   const debounce = useRef(null)
 
   /* Add modal */
@@ -119,7 +122,7 @@ export default function HoSo() {
     } catch { /* ignore */ }
   }, [])
 
-  const loadList = useCallback(async (t, s, p) => {
+  const loadList = useCallback(async (t, s, p, vId, toVal) => {
     setLoading(true)
     try {
       let res
@@ -128,7 +131,12 @@ export default function HoSo() {
         setHH(res.data.data || [])
         setPag({ total: res.data.data?.length ?? 0, totalPages: 1 })
       } else {
-        res = await householdService.getAll({ ...TAB_FILTER[t], page: p, limit: 20 })
+        res = await householdService.getAll({
+          ...TAB_FILTER[t],
+          ...(vId && { villageId: vId }),
+          ...(toVal && { to: toVal }),
+          page: p, limit: 20,
+        })
         setHH(res.data.data || [])
         setPag(res.data.pagination || { total: 0, totalPages: 1 })
       }
@@ -137,17 +145,24 @@ export default function HoSo() {
 
   useEffect(() => { loadStats() }, [loadStats])
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadList(tab, search, page) }, [tab, page])
+  useEffect(() => { loadList(tab, search, page, villageFilter, toFilter) }, [tab, page, villageFilter, toFilter])
   useEffect(() => {
     villageService.getAll().then(r => setVillages(r.data.data || [])).catch(() => {})
   }, [])
+  useEffect(() => {
+    householdService.getToList(villageFilter || undefined)
+      .then(r => setToOptions(r.data.data || []))
+      .catch(() => setToOptions([]))
+  }, [villageFilter])
 
   const handleSearch = v => {
     setSearch(v)
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => { setPage(1); loadList(tab, v, 1) }, 400)
+    debounce.current = setTimeout(() => { setPage(1); loadList(tab, v, 1, villageFilter, toFilter) }, 400)
   }
-  const refresh = () => Promise.all([loadStats(), loadList(tab, search, page)])
+  const handleVillageFilter = v => { setVillageFilter(v); setToFilter(''); setPage(1) }
+  const handleToFilter = v => { setToFilter(v); setPage(1) }
+  const refresh = () => Promise.all([loadStats(), loadList(tab, search, page, villageFilter, toFilter)])
 
   /* ── Household CRUD ── */
   const openAdd = () => { setAddForm(EMPTY_HH); setAddErr(''); setShowAdd(true) }
@@ -163,7 +178,7 @@ export default function HoSo() {
 
   const openEdit = h => {
     setEditId(h.id)
-    setEditForm({ soHoKhau: h.soHoKhau, diaChi: h.diaChi, villageId: h.village?.id || h.villageId, loaiHo: h.loaiHo, trangThai: h.trangThai })
+    setEditForm({ soHoKhau: h.soHoKhau, diaChi: h.diaChi, to: h.to || '', villageId: h.village?.id || h.villageId, loaiHo: h.loaiHo, trangThai: h.trangThai })
     setEditErr(''); setShowEdit(true)
   }
   const handleEdit = async () => {
@@ -365,7 +380,20 @@ export default function HoSo() {
       <div className="table-panel">
         <div className="table-toolbar">
           <Tabs tabs={['Tất cả', 'Thường trú', 'Tạm trú', 'Tạm vắng']} active={tab} onChange={t => { setTab(t); setPage(1) }} />
-          <SearchInput value={search} onChange={handleSearch} placeholder="Tìm số HK, địa chỉ..." />
+          <div className="flex items-center gap-2">
+            <select value={villageFilter} onChange={e => handleVillageFilter(e.target.value)}
+              className="px-3 py-2 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring outline-none">
+              <option value="">Tất cả thôn</option>
+              {villages.map(v => <option key={v.id} value={v.id}>{v.ten}</option>)}
+            </select>
+            <select value={toFilter} onChange={e => handleToFilter(e.target.value)}
+              disabled={toOptions.length === 0}
+              className="px-3 py-2 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring outline-none disabled:opacity-50">
+              <option value="">Tất cả tổ</option>
+              {toOptions.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <SearchInput value={search} onChange={handleSearch} placeholder="Tìm số HK, địa chỉ..." />
+          </div>
         </div>
 
         <DataTable columns={COLUMNS} empty={!loading && households.length === 0}>
@@ -379,6 +407,7 @@ export default function HoSo() {
                 <td className="px-5 py-3 font-mono text-xs font-semibold text-foreground">{h.soHoKhau}</td>
                 <td className="px-5 py-3 text-sm text-foreground max-w-[200px] truncate">{h.diaChi}</td>
                 <td className="px-5 py-3 text-sm text-muted-foreground">{h.village?.ten ?? '—'}</td>
+                <td className="px-5 py-3 text-sm text-muted-foreground">{h.to ?? '—'}</td>
                 <td className="px-5 py-3"><Badge variant={loai.variant}>{loai.label}</Badge></td>
                 <td className="px-5 py-3 text-sm">{h.members?.length ?? 0} người</td>
                 <td className="px-5 py-3"><Badge variant={tt.variant}>{tt.label}</Badge></td>
@@ -412,6 +441,7 @@ export default function HoSo() {
         {addErr && <ErrBox msg={addErr} />}
         <FormInput label="Số hộ khẩu" required placeholder="VD: HK-001" value={addForm.soHoKhau} onChange={e => setAddForm(f => ({ ...f, soHoKhau: e.target.value }))} />
         <FormInput label="Địa chỉ" required placeholder="Số nhà, đường, thôn..." value={addForm.diaChi} onChange={e => setAddForm(f => ({ ...f, diaChi: e.target.value }))} />
+        <FormInput label="Tổ" placeholder="VD: Tổ 1" value={addForm.to} onChange={e => setAddForm(f => ({ ...f, to: e.target.value }))} />
         <Select label="Thôn" required value={addForm.villageId} onChange={v => setAddForm(f => ({ ...f, villageId: v }))} options={villageOpts} />
         <Select label="Loại hộ" value={addForm.loaiHo} onChange={v => setAddForm(f => ({ ...f, loaiHo: v }))} options={loaiHoOpts} />
       </Modal>
@@ -422,6 +452,7 @@ export default function HoSo() {
         {editErr && <ErrBox msg={editErr} />}
         <FormInput label="Số hộ khẩu" required value={editForm.soHoKhau} onChange={e => setEditForm(f => ({ ...f, soHoKhau: e.target.value }))} />
         <FormInput label="Địa chỉ" required value={editForm.diaChi} onChange={e => setEditForm(f => ({ ...f, diaChi: e.target.value }))} />
+        <FormInput label="Tổ" placeholder="VD: Tổ 1" value={editForm.to} onChange={e => setEditForm(f => ({ ...f, to: e.target.value }))} />
         <Select label="Thôn" value={editForm.villageId} onChange={v => setEditForm(f => ({ ...f, villageId: v }))} options={villageOpts} />
         <Select label="Loại hộ" value={editForm.loaiHo} onChange={v => setEditForm(f => ({ ...f, loaiHo: v }))} options={loaiHoOpts} />
         <Select label="Trạng thái" value={editForm.trangThai} onChange={v => setEditForm(f => ({ ...f, trangThai: v }))} options={trangThaiOpts} />
@@ -450,6 +481,7 @@ export default function HoSo() {
                     ['Số hộ khẩu', detailHH.soHoKhau],
                     ['Địa chỉ', detailHH.diaChi],
                     ['Thôn', detailHH.village?.ten ?? '—'],
+                    ['Tổ', detailHH.to ?? '—'],
                     ['Loại hộ', LOAI_HO_LABEL[detailHH.loaiHo]?.label ?? detailHH.loaiHo],
                     ['Trạng thái', TRANG_THAI_LABEL[detailHH.trangThai]?.label ?? detailHH.trangThai],
                     ['Số nhân khẩu', `${detailHH.members?.length ?? 0} người`],

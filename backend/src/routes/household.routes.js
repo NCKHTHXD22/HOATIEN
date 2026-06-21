@@ -13,8 +13,8 @@ router.use(authenticate);
 // GET /api/households?villageId=&trangThai=&page=&limit=
 router.get("/", async (req, res, next) => {
   try {
-    const { villageId, trangThai, loaiHo, page = 1, limit = 20 } = req.query;
-    const { data, total } = await HouseholdService.getAll({ villageId, trangThai, loaiHo, page, limit });
+    const { villageId, trangThai, loaiHo, to, page = 1, limit = 20 } = req.query;
+    const { data, total } = await HouseholdService.getAll({ villageId, trangThai, loaiHo, to, page, limit });
     paginated(res, data, total, page, limit);
   } catch (err) { next(err); }
 });
@@ -27,6 +27,14 @@ router.get("/search", async (req, res, next) => {
     const ids = await SearchService.searchByText(q);
     const households = ids.length ? await HouseholdRepo.findByIds(ids) : [];
     ok(res, households);
+  } catch (err) { next(err); }
+});
+
+// GET /api/households/to-list?villageId=
+router.get("/to-list", async (req, res, next) => {
+  try {
+    const { villageId } = req.query;
+    ok(res, await HouseholdService.getDistinctTo(villageId));
   } catch (err) { next(err); }
 });
 
