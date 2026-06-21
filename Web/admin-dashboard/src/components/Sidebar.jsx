@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, Newspaper, FileText,
   MessageSquareWarning, Users, BarChart3, Settings, LogOut, MapPin,
-  Bell, UserRound, ClipboardList, PieChart, ArrowRightLeft,
+  Bell, ClipboardList, PieChart, ArrowRightLeft,
 } from 'lucide-react'
 import clsx from 'clsx'
 import hoaTienLogo from '../assets/hoa-tien-logo.jpg'
@@ -28,8 +28,7 @@ const navGroups = [
   {
     label: 'Thông báo',
     items: [
-      { to: '/thong-bao',  icon: Bell,          label: 'Soạn & Gửi thông báo' },
-      { to: '/nguoi-nhan', icon: UserRound,      label: 'Người nhận / Nhóm' },
+      { to: '/thong-bao',  icon: Bell,          label: 'Gửi tin Zalo' },
       { to: '/khao-sat',   icon: ClipboardList,  label: 'Khảo sát nhanh' },
       { to: '/bao-cao-tb', icon: PieChart,       label: 'Báo cáo hiệu quả' },
     ],
