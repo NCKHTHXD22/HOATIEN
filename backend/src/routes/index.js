@@ -8,5 +8,6 @@ router.use("/movements",  require("./movement.routes"));
 router.use("/reports",    require("./report.routes"));
 router.use("/zalo",       require("./zalo.routes"));
 router.use("/notify",     require("./notification.routes"));
+router.use("/broadcast",  require("./broadcast"));
 
 module.exports = router;
