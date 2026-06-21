@@ -3,7 +3,9 @@ const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
 const { authenticate, requireRole, requireSendPermission } = require("../middlewares/auth.middleware");
-const { ok, fail } = require("../utils/response");
+// Trả JSON PHẲNG để khớp frontend port từ QUESON (không bọc {success,message,data})
+const ok = (res, data) => res.json(data || { ok: true });
+const fail = (res, msg, code = 400) => res.status(code).json({ error: msg });
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const ZaloService = require("../services/ZaloService");
 const ZaloGroup = require("../models/mongo/ZaloGroup");
