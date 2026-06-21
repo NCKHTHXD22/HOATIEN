@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, FolderOpen, Newspaper, FileText,
+  LayoutDashboard, FolderOpen,
   MessageSquareWarning, Users, BarChart3, Settings, LogOut, MapPin,
   Bell, UsersRound, ClipboardList, PieChart, ArrowRightLeft,
 } from 'lucide-react'
@@ -18,12 +18,7 @@ const navGroups = [
       { to: '/ho-so',     icon: FolderOpen,     label: 'Hồ sơ dân cư' },
       { to: '/thon-xom',  icon: MapPin,         label: 'Thôn / Địa bàn' },
       { to: '/bien-dong', icon: ArrowRightLeft, label: 'Biến động dân cư' },
-      { to: '/van-ban',   icon: FileText,       label: 'Quản lý văn bản' },
     ],
-  },
-  {
-    label: 'Nội dung',
-    items: [{ to: '/tin-tuc', icon: Newspaper, label: 'Tin tức / Thông báo' }],
   },
   {
     label: 'Thông báo',
