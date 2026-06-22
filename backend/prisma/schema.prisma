@@ -47,6 +47,8 @@ enum AdminRole {
   SUPER_ADMIN
   ADMIN_VILLAGE
   VIEWER
+  DEPT_LEADER
+  OFFICER
 }
 
 enum NotifStatus {
@@ -94,6 +96,8 @@ model AdminUser {
   hoTen               String
   role                AdminRole        @default(ADMIN_VILLAGE)
   zaloUserId          String?          @unique
+  email               String?
+  categoryIds         String[]         @default([])
   isActive            Boolean          @default(true)
   canSendNotification Boolean          @default(true)
   villages            Village[]        @relation("AdminVillages")
