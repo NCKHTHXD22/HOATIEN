@@ -9,5 +9,6 @@ router.use("/reports",    require("./report.routes"));
 router.use("/zalo",       require("./zalo.routes"));
 router.use("/notify",     require("./notification.routes"));
 router.use("/broadcast",  require("./broadcast"));
+router.use("/feedbacks",  require("./feedback.routes"));
 
 module.exports = router;
