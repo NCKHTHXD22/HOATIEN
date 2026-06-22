@@ -22,6 +22,8 @@ router.post("/webhook", async (req, res) => {
       return res.status(200).json({ error: 0 });
     }
 
+    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: String(userId), payload: req.body }).catch(() => {});
+
     // Ảnh người dùng gửi (dùng cho bước đính kèm ảnh của luồng phản ánh)
     if (req.body.event_name === "user_send_image" || message?.attachments?.length) {
       const feedbackChat = require("../services/feedbackChat");
@@ -41,8 +43,6 @@ router.post("/webhook", async (req, res) => {
     if (req.body.event_name !== "user_send_text") {
       return res.status(200).json({ error: 0 });
     }
-
-    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: userId, payload: req.body }).catch(() => {});
 
     const reply = await ZaloService.handleMessage(userId, message.text);
     logger.info(`Zalo webhook [${userId}]: "${message.text}" → replied`);
