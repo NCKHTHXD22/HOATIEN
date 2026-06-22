@@ -7,9 +7,22 @@ const { sendText } = require("../utils/zaloBroadcast");
 const { uploadFromBuffer } = require("../utils/cloudinaryUpload");
 
 const memoryUpload = multer({ storage: multer.memoryStorage() });
-const LEADER = "SUPER_ADMIN";
+const LEADER_ROLES = ["SUPER_ADMIN", "DEPT_LEADER"];
 
 router.use(authenticate);
+
+// categoryIds của DEPT_LEADER (null = xem tất cả). Lấy từ Postgres.
+async function myCats(u) {
+  if (u.role !== "DEPT_LEADER") return null;
+  const row = await prisma.adminUser.findUnique({ where: { id: u.id }, select: { categoryIds: true } });
+  const ids = row?.categoryIds || [];
+  return ids.length ? ids : null;
+}
+async function baseFilter(u) {
+  if (u.role === "SUPER_ADMIN" || u.role === "VIEWER") return {};
+  if (u.role === "DEPT_LEADER") { const c = await myCats(u); return c ? { categoryId: { $in: c } } : {}; }
+  return { assignedTo: u.id }; // OFFICER / ADMIN_VILLAGE
+}
 
 // Resolve tên cán bộ (Postgres) cho các id trong feedback -> {_id, fullName}
 async function _adminMap(ids) {
@@ -28,14 +41,14 @@ function _enrich(fb, map) {
     categoryId: fb.linhVuc ? { name: fb.linhVuc } : null,
   };
 }
-const isLeader = (u) => u.role === LEADER;
+const isLeader = (u) => LEADER_ROLES.includes(u.role);
 const canAccess = (u, fb) => isLeader(u) || u.role === "VIEWER" || String(fb.assignedTo || "") === String(u.id);
 
 // GET /api/feedbacks/stats
 router.get("/stats", async (req, res, next) => {
   try {
     const me = req.user;
-    const base = (!isLeader(me) && me.role !== "VIEWER") ? { assignedTo: me.id } : {};
+    const base = await baseFilter(me);
     const [pending, processing, draft, resolved] = await Promise.all([
       Feedback.countDocuments({ ...base, status: "pending" }),
       Feedback.countDocuments({ ...base, status: "processing" }),
@@ -54,7 +67,7 @@ router.get("/", async (req, res, next) => {
     const skip = (parseInt(page) - 1) * limit;
     const filter = {};
     const me = req.user;
-    if (!isLeader(me) && me.role !== "VIEWER") filter.assignedTo = me.id;
+    Object.assign(filter, await baseFilter(me));
     if (status) filter.status = status;
     if (q) {
       const clean = q.replace(/^#/, "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -83,7 +96,7 @@ router.get("/:id", async (req, res, next) => {
     let admins = [];
     if (isLeader(req.user)) {
       const rows = await prisma.adminUser.findMany({
-        where: { role: { in: ["ADMIN_VILLAGE", "SUPER_ADMIN"] }, isActive: true },
+        where: { role: { in: ["OFFICER", "DEPT_LEADER", "ADMIN_VILLAGE"] }, isActive: true },
         select: { id: true, hoTen: true, username: true, role: true },
       });
       admins = rows.map((r) => ({ _id: r.id, fullName: r.hoTen, username: r.username, role: r.role }));
@@ -109,7 +122,7 @@ router.post("/attachments/upload/image", (req, res) => {
 });
 
 // POST /api/feedbacks/:id/assign — lãnh đạo phân công
-router.post("/:id/assign", requireRole(LEADER), async (req, res, next) => {
+router.post("/:id/assign", requireRole(...LEADER_ROLES), async (req, res, next) => {
   try {
     const { assignedTo, note, images, deadline } = req.body;
     const fb = await Feedback.findById(req.params.id);
@@ -146,7 +159,7 @@ router.post("/:id/draft", async (req, res, next) => {
 });
 
 // POST /api/feedbacks/:id/approve — lãnh đạo duyệt + gửi dân
-router.post("/:id/approve", requireRole(LEADER), async (req, res, next) => {
+router.post("/:id/approve", requireRole(...LEADER_ROLES), async (req, res, next) => {
   try {
     const fb = await Feedback.findById(req.params.id);
     if (!fb) return res.status(404).json({ error: "Không tìm thấy" });
@@ -165,7 +178,7 @@ router.post("/:id/approve", requireRole(LEADER), async (req, res, next) => {
 });
 
 // POST /api/feedbacks/:id/reject — lãnh đạo từ chối dự thảo
-router.post("/:id/reject", requireRole(LEADER), async (req, res, next) => {
+router.post("/:id/reject", requireRole(...LEADER_ROLES), async (req, res, next) => {
   try {
     const fb = await Feedback.findById(req.params.id);
     if (!fb) return res.status(404).json({ error: "Không tìm thấy" });
@@ -179,7 +192,7 @@ router.post("/:id/reject", requireRole(LEADER), async (req, res, next) => {
 });
 
 // POST /api/feedbacks/:id/reply — lãnh đạo phản hồi trực tiếp (gửi dân ngay)
-router.post("/:id/reply", requireRole(LEADER), async (req, res, next) => {
+router.post("/:id/reply", requireRole(...LEADER_ROLES), async (req, res, next) => {
   try {
     const { response } = req.body;
     if (!response?.trim()) return res.status(400).json({ error: "Nhập nội dung phản hồi" });
@@ -197,7 +210,7 @@ router.post("/:id/reply", requireRole(LEADER), async (req, res, next) => {
 });
 
 // DELETE /api/feedbacks/:id
-router.delete("/:id", requireRole(LEADER), async (req, res, next) => {
+router.delete("/:id", requireRole(...LEADER_ROLES), async (req, res, next) => {
   try { await Feedback.findByIdAndDelete(req.params.id); res.json({ ok: true }); } catch (err) { next(err); }
 });
 

@@ -20,7 +20,8 @@ const feedbackSchema = new Schema(
     content:     { type: String, required: true },
     imageUrl:    { type: String, default: "" },
     imageUrls:   [{ type: String }],
-    linhVuc:     { type: String, default: "" }, // lĩnh vực phản ánh
+    linhVuc:     { type: String, default: "" }, // tên lĩnh vực (hiển thị)
+    categoryId:  { type: String, default: null, index: true }, // _id Category
     // pending = mới, processing = đang xử lý/đã phân công, draft = dự thảo chờ duyệt,
     // resolved/done = đã gửi dân
     status:      { type: String, enum: ["pending", "processing", "draft", "resolved", "done"], default: "pending" },

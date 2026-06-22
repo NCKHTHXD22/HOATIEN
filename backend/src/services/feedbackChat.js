@@ -3,6 +3,7 @@ const { sendText } = require("../utils/zaloBroadcast");
 const { uploadFromUrl, uploadFromZaloImageUrl } = require("../utils/cloudinaryUpload");
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const Feedback = require("../models/mongo/Feedback");
+const Category = require("../models/mongo/Category");
 const { setState, getState, clearState } = require("./chatState");
 const logger = require("../utils/logger");
 
@@ -44,12 +45,16 @@ async function startFeedback(userId, displayName = "") {
   );
 }
 
+// Danh sách lĩnh vực: ưu tiên Category trong DB, fallback list cố định
+async function _categories() {
+  const cats = await Category.find({}).sort({ order: 1 }).lean().catch(() => []);
+  if (cats.length) return cats.map((c) => ({ name: c.name, categoryId: String(c._id), groupId: c.zaloGroupId || "" }));
+  return LINH_VUC.map((name) => ({ name, categoryId: null, groupId: "" }));
+}
+
 async function sendCategoryMenu(userId) {
-  await send(userId,
-    "🏷️ Chọn loại phản ánh:\n\n" +
-    LINH_VUC.map((c, i) => `${i + 1}️⃣ ${c}`).join("\n") +
-    "\n\n(Gõ số 1-" + LINH_VUC.length + " để chọn)"
-  );
+  const list = await _categories();
+  await send(userId, "🏷️ Chọn loại phản ánh:\n\n" + list.map((c, i) => `${i + 1}️⃣ ${c.name}`).join("\n") + `\n\n(Gõ số 1-${list.length} để chọn)`);
 }
 
 async function sendImagePrompt(userId, count) {
@@ -104,14 +109,16 @@ async function handleText(userId, text, displayName) {
   }
 
   if (state.step === "waiting_category") {
+    const list = await _categories();
     const idx = parseInt(lower) - 1;
-    if (isNaN(idx) || !LINH_VUC[idx]) {
-      await send(userId, `⚠️ Vui lòng gõ số từ 1 đến ${LINH_VUC.length}.`);
+    if (isNaN(idx) || !list[idx]) {
+      await send(userId, `⚠️ Vui lòng gõ số từ 1 đến ${list.length}.`);
       await sendCategoryMenu(userId);
       return;
     }
-    setState(userId, { ...state, step: "waiting_content", linhVuc: LINH_VUC[idx] });
-    await send(userId, `✅ Loại: ${LINH_VUC[idx]}\n\n✏️ Nhập nội dung phản ánh (tối thiểu 5 ký tự):\n\n(Nhắn "huỷ" để thoát)`);
+    const cat = list[idx];
+    setState(userId, { ...state, step: "waiting_content", linhVuc: cat.name, categoryId: cat.categoryId, categoryGroupId: cat.groupId });
+    await send(userId, `✅ Loại: ${cat.name}\n\n✏️ Nhập nội dung phản ánh (tối thiểu 5 ký tự):\n\n(Nhắn "huỷ" để thoát)`);
     return;
   }
 
@@ -225,12 +232,23 @@ async function saveFeedback(userId, state) {
     const imageUrls = state.imageUrls || [];
     const fb = await Feedback.create({
       userId, displayName, contact: state.contact, content: state.content,
-      imageUrl: imageUrls[0] || "", imageUrls, linhVuc: state.linhVuc || "", deadline,
+      imageUrl: imageUrls[0] || "", imageUrls, linhVuc: state.linhVuc || "",
+      categoryId: state.categoryId || null, deadline,
     });
     clearState(userId);
     const code = fb._id.toString().slice(-5).toUpperCase();
     await send(userId, `✅ Đã tiếp nhận phản ánh!\n\nMã phản ánh: #${code}\nUBND Xã Hòa Tiến sẽ xử lý và phản hồi. Cảm ơn bạn!`);
     logger.info(`[Feedback] mới #${code} userId=${userId} linhVuc=${state.linhVuc} imgs=${imageUrls.length}`);
+
+    // Thông báo vào nhóm Zalo của lĩnh vực (nếu có)
+    if (state.categoryGroupId) {
+      const imgInfo = imageUrls.length ? `🖼️ ${imageUrls.length} ảnh` : "🖼️ Không ảnh";
+      const groupMsg =
+        `📩 PHẢN ÁNH MỚI #${code}\n${"─".repeat(26)}\n` +
+        (displayName ? `👤 ${displayName}\n` : "") +
+        `📞 ${state.contact}\n🏷️ ${state.linhVuc}\n📝 ${state.content}\n${imgInfo}`;
+      sendText(state.categoryGroupId, groupMsg, true).catch(() => {});
+    }
   } catch (err) {
     logger.error(`[Feedback] lưu thất bại: ${err.message}`);
     await send(userId, "⚠️ Có lỗi khi lưu phản ánh. Vui lòng thử lại sau.");
