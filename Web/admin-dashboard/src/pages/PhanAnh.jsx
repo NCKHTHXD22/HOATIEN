@@ -1,235 +1,262 @@
-import { useState, useEffect, useCallback } from 'react'
-import { MessageSquareWarning, Clock, CheckCircle, FileEdit, RefreshCw, X, Send, Search } from 'lucide-react'
+import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Search, ChevronLeft, ChevronRight, Loader2, Filter, Eye, Inbox } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import StatusBadge from '../components/StatusBadge'
+import { formatDateShort, getAvatarColor } from '../lib/utils'
 
-const STATUS = {
-  pending:    { label: 'Chưa xử lý', cls: 'bg-red-100 text-red-700' },
-  processing: { label: 'Đang xử lý', cls: 'bg-amber-100 text-amber-700' },
-  draft:      { label: 'Dự thảo chờ duyệt', cls: 'bg-blue-100 text-blue-700' },
-  resolved:   { label: 'Đã xử lý', cls: 'bg-green-100 text-green-700' },
-  done:       { label: 'Đã xử lý', cls: 'bg-green-100 text-green-700' },
-}
-const TABS = [
-  { key: '', label: 'Tất cả' },
-  { key: 'pending', label: 'Chưa xử lý' },
-  { key: 'processing', label: 'Đang xử lý' },
-  { key: 'draft', label: 'Dự thảo' },
-  { key: 'resolved', label: 'Đã xử lý' },
+const STATUS_OPTIONS = [
+  { value: '',         label: 'Tất cả trạng thái' },
+  { value: 'pending',  label: '⏳ Chờ xử lý' },
+  { value: 'processing', label: '⚙️ Đang xử lý' },
+  { value: 'draft',    label: '📄 Chờ duyệt' },
+  { value: 'resolved', label: '✅ Đã giải quyết' },
 ]
-const fmt = (d) => (d ? new Date(d).toLocaleString('vi-VN') : '—')
 
-// ── Modal chi tiết + xử lý ──
-function DetailModal({ id, open, onClose, onChanged, isLeader }) {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [assignTo, setAssignTo] = useState('')
-  const [assignNote, setAssignNote] = useState('')
-  const [draft, setDraft] = useState('')
-  const [finalResp, setFinalResp] = useState('')
-  const [reject, setReject] = useState('')
-
-  const load = useCallback(() => {
-    if (!id) return
-    setLoading(true)
-    api.get(`/api/feedbacks/${id}`).then(r => {
-      setData(r.data)
-      setDraft(r.data.feedback?.draftResponse || '')
-      setFinalResp(r.data.feedback?.draftResponse || '')
-      setAssignTo(r.data.feedback?.assignedTo?._id || '')
-    }).finally(() => setLoading(false))
-  }, [id])
-  useEffect(() => { if (open) load() }, [open, load])
-
-  const act = async (fn, msg) => {
-    setBusy(true)
-    try { await fn(); onChanged() } catch (e) { alert(e.response?.data?.error || 'Lỗi') } finally { setBusy(false) }
-  }
-
-  if (!open) return null
-  const fb = data?.feedback
-  const admins = data?.admins || []
-
+function SelectField({ value, onChange, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-base font-semibold">Chi tiết phản ánh {fb ? `#${fb._id.slice(-5).toUpperCase()}` : ''}</h2>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100"><X size={18} /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {loading || !fb ? (
-            <div className="py-8 text-center text-gray-400"><RefreshCw size={20} className="animate-spin inline" /></div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS[fb.status]?.cls}`}>{STATUS[fb.status]?.label}</span>
-                {fb.categoryId?.name && <span className="text-xs text-gray-500">· {fb.categoryId.name}</span>}
-              </div>
-              <div className="text-sm space-y-1">
-                <p><b>Người gửi:</b> {fb.displayName || '(Chưa có tên)'} · {fb.contact}</p>
-                <p><b>Ngày gửi:</b> {fmt(fb.createdAt)}{fb.deadline && ` · Hạn: ${fmt(fb.deadline)}`}</p>
-                <p><b>Nội dung:</b></p>
-                <p className="bg-gray-50 rounded p-3 whitespace-pre-wrap">{fb.content}</p>
-              </div>
-              {fb.imageUrls?.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {fb.imageUrls.map((u, i) => (
-                    <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} alt="" className="h-20 w-20 object-cover rounded-lg border" /></a>
-                  ))}
-                </div>
-              )}
-              {fb.assignedTo && <p className="text-xs text-gray-500">Phân công: <b>{fb.assignedTo.fullName}</b>{fb.assignNote && ` — ${fb.assignNote}`}</p>}
-              {fb.rejectedReason && <p className="text-xs text-red-600">Bị từ chối: {fb.rejectedReason}</p>}
-              {fb.finalResponse && <div className="text-sm bg-green-50 rounded p-3"><b>Đã phản hồi:</b> {fb.finalResponse}</div>}
-
-              {/* ── Hành động ── */}
-              {fb.status !== 'resolved' && fb.status !== 'done' && (
-                <div className="border-t pt-4 space-y-4">
-                  {isLeader && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-semibold text-gray-700">Phân công cán bộ</p>
-                      <div className="flex gap-2">
-                        <select value={assignTo} onChange={e => setAssignTo(e.target.value)} className="flex-1 border rounded-lg px-3 py-2 text-sm">
-                          <option value="">— Chọn cán bộ —</option>
-                          {admins.map(a => <option key={a._id} value={a._id}>{a.fullName} ({a.role})</option>)}
-                        </select>
-                        <button disabled={busy || !assignTo} onClick={() => act(() => api.post(`/api/feedbacks/${id}/assign`, { assignedTo: assignTo, note: assignNote }))}
-                          className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg disabled:opacity-50">Giao</button>
-                      </div>
-                      <input value={assignNote} onChange={e => setAssignNote(e.target.value)} placeholder="Ghi chú phân công (tuỳ chọn)" className="w-full border rounded-lg px-3 py-2 text-sm" />
-                    </div>
-                  )}
-
-                  {/* Cán bộ (hoặc lãnh đạo) soạn dự thảo */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-gray-700">Soạn dự thảo phản hồi</p>
-                    <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="Nội dung dự thảo gửi lãnh đạo duyệt..." className="w-full border rounded-lg px-3 py-2 text-sm" />
-                    <button disabled={busy || !draft.trim()} onClick={() => act(() => api.post(`/api/feedbacks/${id}/draft`, { draftResponse: draft }))}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-sm rounded-lg disabled:opacity-50"><FileEdit size={14} /> Lưu dự thảo</button>
-                  </div>
-
-                  {/* Lãnh đạo duyệt dự thảo */}
-                  {isLeader && fb.status === 'draft' && (
-                    <div className="space-y-2 bg-blue-50/50 rounded-lg p-3">
-                      <p className="text-sm font-semibold text-blue-700">Duyệt & gửi dân (có thể sửa nội dung)</p>
-                      <textarea value={finalResp} onChange={e => setFinalResp(e.target.value)} rows={3} className="w-full border rounded-lg px-3 py-2 text-sm" />
-                      <div className="flex gap-2">
-                        <button disabled={busy || !finalResp.trim()} onClick={() => act(() => api.post(`/api/feedbacks/${id}/approve`, { finalResponse: finalResp }))}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white text-sm rounded-lg disabled:opacity-50"><Send size={14} /> Duyệt & gửi</button>
-                        <input value={reject} onChange={e => setReject(e.target.value)} placeholder="Lý do từ chối" className="flex-1 border rounded-lg px-3 py-2 text-sm" />
-                        <button disabled={busy} onClick={() => act(() => api.post(`/api/feedbacks/${id}/reject`, { rejectedReason: reject }))}
-                          className="px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg">Từ chối</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Lãnh đạo phản hồi nhanh */}
-                  {isLeader && (
-                    <details className="text-sm">
-                      <summary className="cursor-pointer text-gray-500">Phản hồi nhanh (gửi dân ngay, bỏ qua quy trình)</summary>
-                      <div className="flex gap-2 mt-2">
-                        <input value={finalResp} onChange={e => setFinalResp(e.target.value)} placeholder="Nội dung phản hồi" className="flex-1 border rounded-lg px-3 py-2 text-sm" />
-                        <button disabled={busy || !finalResp.trim()} onClick={() => act(() => api.post(`/api/feedbacks/${id}/reply`, { response: finalResp }))}
-                          className="px-3 py-2 bg-green-600 text-white text-sm rounded-lg disabled:opacity-50">Gửi</button>
-                      </div>
-                    </details>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        <div className="px-6 py-3 border-t text-right">
-          <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Đóng</button>
-        </div>
-      </div>
-    </div>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-400 transition-all duration-300 cursor-pointer"
+    >
+      {children}
+    </select>
   )
 }
 
 export default function PhanAnh() {
   const { user } = useAuth()
-  const isLeader = user?.role === 'SUPER_ADMIN'
-  const [stats, setStats] = useState({ pending: 0, processing: 0, draft: 0, resolved: 0 })
-  const [list, setList] = useState([])
-  const [tab, setTab] = useState('')
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [detail, setDetail] = useState(null)
+  const [searchParams] = useSearchParams()
+  const [filter, setFilter] = useState({ status: '', assignedTo: '', categoryId: '', q: searchParams.get('q') || '' })
+  const [page, setPage] = useState(1)
 
-  const load = useCallback(() => {
-    setLoading(true)
-    Promise.all([
-      api.get('/api/feedbacks', { params: { status: tab || undefined, q: search || undefined } }),
-      api.get('/api/feedbacks/stats'),
-    ]).then(([l, s]) => { setList(l.data.feedbacks || []); setStats(s.data) })
-      .catch(() => {}).finally(() => setLoading(false))
-  }, [tab, search])
-  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t) }, [load])
+  const { data, isLoading } = useQuery({
+    queryKey: ['feedbacks', filter, page],
+    queryFn: () => api.get('/api/feedbacks', { params: { ...filter, page } }).then((r) => r.data),
+    placeholderData: (prev) => prev,
+  })
+
+  const { data: adminsData } = useQuery({
+    queryKey: ['admins'],
+    queryFn: () => api.get('/api/users').then((r) => r.data),
+    enabled: user?.role === 'SUPER_ADMIN' || user?.role === 'DEPT_LEADER',
+  })
+
+  const { data: catsData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.get('/api/categories').then((r) => r.data),
+  })
+
+  const setF = (key, value) => { setFilter((f) => ({ ...f, [key]: value })); setPage(1) }
+
+  const feedbacks = data?.feedbacks ?? []
+  const pagination = data?.pagination ?? { page: 1, totalPages: 1, total: 0 }
+  const hasFilter = filter.status || filter.assignedTo || filter.categoryId || filter.q
+  const isLeader = user?.role === 'SUPER_ADMIN' || user?.role === 'DEPT_LEADER'
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Phản ánh kiến nghị</h1>
-        <p className="text-sm text-gray-500 mt-1">Tiếp nhận và xử lý ý kiến, phản ánh của công dân qua Zalo</p>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: 'Chưa xử lý', val: stats.pending, icon: MessageSquareWarning, color: '#dc2626' },
-          { label: 'Đang xử lý', val: stats.processing, icon: Clock, color: '#d97706' },
-          { label: 'Dự thảo chờ duyệt', val: stats.draft, icon: FileEdit, color: '#2563eb' },
-          { label: 'Đã xử lý', val: stats.resolved, icon: CheckCircle, color: '#16a34a' },
-        ].map((c) => (
-          <div key={c.label} className="bg-white rounded-xl border p-4 flex items-center justify-between">
-            <div><p className="text-xs text-gray-500">{c.label}</p><p className="text-2xl font-bold" style={{ color: c.color }}>{c.val}</p></div>
-            <c.icon size={28} style={{ color: c.color }} />
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-xl border">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b">
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md ${tab === t.key ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>{t.label}</button>
-            ))}
-          </div>
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm tên, nội dung, mã..." className="border rounded-lg pl-8 pr-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-400" />
-          </div>
+    <div className="space-y-4 animate-fade-in">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-800">Góp ý &amp; Phản ánh</h1>
+          <p className="text-sm text-slate-400 mt-0.5">
+            {pagination.total > 0 ? `${pagination.total} góp ý tổng cộng` : 'Danh sách phản ánh người dân'}
+          </p>
         </div>
-        <table className="w-full text-sm">
-          <thead><tr className="bg-gray-50 border-b text-left text-gray-600">
-            <th className="px-4 py-2.5 font-medium">Mã</th>
-            <th className="px-4 py-2.5 font-medium">Công dân</th>
-            <th className="px-4 py-2.5 font-medium">Nội dung</th>
-            <th className="px-4 py-2.5 font-medium hidden md:table-cell">Lĩnh vực</th>
-            <th className="px-4 py-2.5 font-medium">Trạng thái</th>
-            <th className="px-4 py-2.5 font-medium hidden md:table-cell">Phân công</th>
-          </tr></thead>
-          <tbody className="divide-y">
-            {loading ? <tr><td colSpan={6} className="text-center py-10 text-gray-400"><RefreshCw size={18} className="animate-spin inline mr-2" />Đang tải...</td></tr>
-              : list.length === 0 ? <tr><td colSpan={6} className="text-center py-10 text-gray-400">Chưa có phản ánh nào</td></tr>
-              : list.map(f => (
-                <tr key={f._id} onClick={() => setDetail(f._id)} className="hover:bg-gray-50 cursor-pointer">
-                  <td className="px-4 py-2.5 font-mono text-xs">#{f._id.slice(-5).toUpperCase()}</td>
-                  <td className="px-4 py-2.5">{f.displayName || '(Chưa tên)'}<div className="text-xs text-gray-400">{f.contact}</div></td>
-                  <td className="px-4 py-2.5 max-w-xs truncate">{f.content}</td>
-                  <td className="px-4 py-2.5 hidden md:table-cell text-gray-500 text-xs">{f.categoryId?.name || '—'}</td>
-                  <td className="px-4 py-2.5"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS[f.status]?.cls}`}>{STATUS[f.status]?.label}</span></td>
-                  <td className="px-4 py-2.5 hidden md:table-cell text-xs text-gray-500">{f.assignedTo?.fullName || '—'}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
       </div>
 
-      <DetailModal id={detail} open={!!detail} onClose={() => setDetail(null)} onChanged={() => { load(); }} isLeader={isLeader} />
+      {/* Filter card */}
+      <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-500">
+            <Filter className="h-3.5 w-3.5" /> Lọc:
+          </div>
+
+          <SelectField value={filter.status} onChange={(v) => setF('status', v)}>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </SelectField>
+
+          {/* Lọc loại phản ánh */}
+          <SelectField value={filter.categoryId} onChange={(v) => setF('categoryId', v)}>
+            <option value="">Tất cả loại</option>
+            {catsData?.categories?.map((c) => (
+              <option key={c._id} value={c._id}>{c.icon} {c.name}</option>
+            ))}
+          </SelectField>
+
+          {/* Lọc phân công — chỉ leader thấy */}
+          {isLeader && (
+            <SelectField value={filter.assignedTo} onChange={(v) => setF('assignedTo', v)}>
+              <option value="">Tất cả phân công</option>
+              <option value="none">Chưa phân công</option>
+              {adminsData?.data?.map((a) => (
+                <option key={a.id} value={a.id}>{a.hoTen} ({a.role})</option>
+              ))}
+            </SelectField>
+          )}
+
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-300 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Tìm theo mã hồ sơ, tên, liên hệ, nội dung..."
+              value={filter.q}
+              onChange={(e) => setF('q', e.target.value)}
+              className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-400 transition-all duration-300"
+            />
+          </div>
+
+          {hasFilter && (
+            <button
+              onClick={() => { setFilter({ status: '', assignedTo: '', categoryId: '', q: '' }); setPage(1) }}
+              className="h-9 px-3 rounded-xl text-sm text-slate-500 hover:text-red-500 hover:bg-red-50 border border-slate-200 hover:border-red-200 transition-all font-medium"
+            >
+              Xóa lọc
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Table card */}
+      <div className="rounded-2xl bg-white border border-slate-100 shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-52 gap-3">
+            <Loader2 className="h-7 w-7 animate-spin text-emerald-500" />
+            <p className="text-sm text-slate-400">Đang tải...</p>
+          </div>
+        ) : feedbacks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Inbox className="h-10 w-10 text-slate-200 mb-3" />
+            <p className="font-semibold text-slate-500">Không có góp ý nào</p>
+            <p className="text-sm text-slate-400 mt-1">Thử thay đổi bộ lọc</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: 'linear-gradient(135deg, #047857, #10b981)' }}>
+                  <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80 w-10">#</th>
+                  <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80 w-20">Mã hồ sơ</th>
+                  <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80">Người gửi</th>
+                  <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80">Nội dung</th>
+                  <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80 w-28">Trạng thái</th>
+                  <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80 hidden lg:table-cell">Loại</th>
+                  {isLeader && (
+                    <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80 w-32 hidden md:table-cell">Phân công</th>
+                  )}
+                  <th className="text-left px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-white/80 w-24 hidden sm:table-cell">Ngày gửi</th>
+                  <th className="w-16"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {feedbacks.map((fb, i) => (
+                  <tr key={fb._id} className="hover:bg-emerald-50/40 transition-colors duration-300 group">
+                    <td className="px-4 py-3.5 text-slate-300 text-xs font-mono">
+                      {(page - 1) * 20 + i + 1}
+                    </td>
+                    <td className="px-4 py-3.5 text-xs font-mono font-semibold text-emerald-600">
+                      #{fb._id.slice(-5).toUpperCase()}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        {fb.avatar ? (
+                          <img
+                            src={fb.avatar}
+                            alt={fb.displayName || fb.contact || '?'}
+                            className="h-8 w-8 shrink-0 rounded-full object-cover shadow-sm"
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
+                          />
+                        ) : null}
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${getAvatarColor(fb.userId || fb.displayName || fb.contact || '?')} text-white text-xs font-bold shadow-sm`}
+                          style={{ display: fb.avatar ? 'none' : 'flex' }}
+                        >
+                          {(fb.displayName || fb.contact || '?')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-700 truncate max-w-[120px] group-hover:text-emerald-600 transition-colors">
+                            {fb.displayName || '(Ẩn danh)'}
+                          </p>
+                          <p className="text-[11px] text-slate-400">{fb.contact}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <p className="truncate max-w-[220px] text-slate-600">{fb.content}</p>
+                      {(fb.imageUrls?.length > 0 || fb.imageUrl) && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
+                          📷 {fb.imageUrls?.length > 1 ? `${fb.imageUrls.length} ảnh` : 'Có ảnh'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <StatusBadge status={fb.status} />
+                    </td>
+                    <td className="px-4 py-3.5 text-xs text-slate-500 hidden lg:table-cell">
+                      {fb.categoryId ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span>{fb.categoryId.icon}</span>
+                          <span className="truncate max-w-[120px]">{fb.categoryId.name}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    {isLeader && (
+                      <td className="px-4 py-3.5 text-xs text-slate-400 hidden md:table-cell">
+                        {fb.assignedTo?.fullName ?? <span className="text-slate-300">—</span>}
+                      </td>
+                    )}
+                    <td className="px-4 py-3.5 text-xs text-slate-400 hidden sm:table-cell">
+                      {formatDateShort(fb.createdAt)}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Link
+                        to={`/phan-anh/${fb._id}`}
+                        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 hover:border-emerald-200 transition-all duration-300"
+                      >
+                        <Eye className="h-3 w-3" /> Xem
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-slate-50 bg-slate-50/50">
+            <span className="text-xs text-slate-400">
+              Trang <b className="text-slate-600">{pagination.page}</b> / {pagination.totalPages}
+              &nbsp;·&nbsp; {pagination.total} kết quả
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-white hover:border-emerald-300 hover:text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-white hover:border-emerald-300 hover:text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300"
+                disabled={page >= pagination.totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

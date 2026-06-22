@@ -7,6 +7,7 @@ import HoSo from './pages/HoSo'
 import TinTuc from './pages/TinTuc'
 import VanBan from './pages/VanBan'
 import PhanAnh from './pages/PhanAnh'
+import PhanAnhDetail from './pages/PhanAnhDetail'
 import NhanSu from './pages/NhanSu'
 import BaoCao from './pages/BaoCao'
 import CaiDat from './pages/CaiDat'
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="tin-tuc"  element={<TinTuc />} />
         <Route path="van-ban"  element={<VanBan />} />
         <Route path="phan-anh" element={<PhanAnh />} />
+        <Route path="phan-anh/:id" element={<PhanAnhDetail />} />
         <Route path="nhan-su"  element={<NhanSu />} />
         <Route path="bao-cao"  element={<BaoCao />} />
         <Route path="cai-dat"  element={<CaiDat />} />

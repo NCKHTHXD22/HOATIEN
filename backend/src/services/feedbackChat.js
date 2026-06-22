@@ -235,6 +235,14 @@ async function saveFeedback(userId, state) {
       imageUrl: imageUrls[0] || "", imageUrls, linhVuc: state.linhVuc || "",
       categoryId: state.categoryId || null, deadline,
     });
+
+    try {
+      const InAppAlertService = require("./InAppAlertService");
+      InAppAlertService.notifyNewFeedback(fb).catch(() => {});
+    } catch (alertErr) {
+      logger.error(`[Feedback Alert] Lỗi khi tạo thông báo in-app: ${alertErr.message}`);
+    }
+
     clearState(userId);
     const code = fb._id.toString().slice(-5).toUpperCase();
     await send(userId, `✅ Đã tiếp nhận phản ánh!\n\nMã phản ánh: #${code}\nUBND Xã Hòa Tiến sẽ xử lý và phản hồi. Cảm ơn bạn!`);

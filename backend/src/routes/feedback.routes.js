@@ -4,7 +4,8 @@ const { prisma } = require("../config/database");
 const Feedback = require("../models/mongo/Feedback");
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 const { sendText } = require("../utils/zaloBroadcast");
-const { uploadFromBuffer } = require("../utils/cloudinaryUpload");
+const { uploadFromBuffer, uploadVideoFromBuffer, uploadRawFromBuffer } = require("../utils/cloudinaryUpload");
+const InAppAlertService = require("../services/InAppAlertService");
 
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 const LEADER_ROLES = ["SUPER_ADMIN", "DEPT_LEADER"];
@@ -121,6 +122,31 @@ router.post("/attachments/upload/image", (req, res) => {
   });
 });
 
+// POST /api/feedbacks/attachments/upload/video
+router.post("/attachments/upload/video", (req, res) => {
+  memoryUpload.single("video")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "Không có file video" });
+    if (!req.file.mimetype.startsWith("video/")) return res.status(400).json({ error: "Chỉ nhận video" });
+    try {
+      const url = await uploadVideoFromBuffer(req.file.buffer, `fb_vid_${Date.now()}`);
+      res.json({ url, name: req.file.originalname });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+// POST /api/feedbacks/attachments/upload/file
+router.post("/attachments/upload/file", (req, res) => {
+  memoryUpload.single("file")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "Không có file đính kèm" });
+    try {
+      const url = await uploadRawFromBuffer(req.file.buffer, `fb_file_${Date.now()}`);
+      res.json({ url, name: req.file.originalname });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
 // POST /api/feedbacks/:id/assign — lãnh đạo phân công
 router.post("/:id/assign", requireRole(...LEADER_ROLES), async (req, res, next) => {
   try {
@@ -135,6 +161,7 @@ router.post("/:id/assign", requireRole(...LEADER_ROLES), async (req, res, next) 
     if (fb.status === "pending") fb.status = "processing";
     fb.updatedAt = new Date();
     await fb.save();
+    InAppAlertService.notifyAssigned(fb, req.user.id).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -154,6 +181,7 @@ router.post("/:id/draft", async (req, res, next) => {
     fb.draftAttachments = { note: note?.trim() || "", images: images || [], sentBy: req.user.id, sentAt: new Date() };
     fb.updatedAt = new Date();
     await fb.save();
+    InAppAlertService.notifyDraft(fb, req.user.id).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -173,6 +201,7 @@ router.post("/:id/approve", requireRole(...LEADER_ROLES), async (req, res, next)
     fb.status = "resolved";
     fb.updatedAt = new Date();
     await fb.save();
+    InAppAlertService.notifyApproved(fb, req.user.id).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -183,10 +212,12 @@ router.post("/:id/reject", requireRole(...LEADER_ROLES), async (req, res, next) 
     const fb = await Feedback.findById(req.params.id);
     if (!fb) return res.status(404).json({ error: "Không tìm thấy" });
     if (fb.status !== "draft") return res.status(400).json({ error: "Chỉ từ chối được phản ánh ở Dự thảo" });
-    fb.rejectedReason = req.body.rejectedReason?.trim() || "";
+    const rejectedReason = req.body.rejectedReason?.trim() || "";
+    fb.rejectedReason = rejectedReason;
     fb.status = "processing";
     fb.updatedAt = new Date();
     await fb.save();
+    InAppAlertService.notifyRejected(fb, req.user.id, rejectedReason).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -33,7 +33,8 @@ router.post(
     body("username").notEmpty().isLength({ min: 3 }),
     body("password").notEmpty().isLength({ min: 6 }),
     body("hoTen").notEmpty(),
-    body("role").isIn(["SUPER_ADMIN", "ADMIN_VILLAGE", "VIEWER"]),
+    body("role").isIn(["SUPER_ADMIN", "DEPT_LEADER", "OFFICER", "ADMIN_VILLAGE", "VIEWER"]),
+    body("categoryIds").optional().isArray(),
   ],
   validate,
   async (req, res) => {
@@ -53,6 +54,37 @@ router.get("/users", authenticate, requireRole("SUPER_ADMIN"), async (req, res, 
     ok(res, users.map(({ passwordHash: _, ...u }) => u));
   } catch (err) { next(err); }
 });
+
+// PUT /api/auth/users/:id  (chỉ SUPER_ADMIN)
+router.put(
+  "/users/:id",
+  authenticate,
+  requireRole("SUPER_ADMIN"),
+  [
+    body("hoTen").optional().notEmpty(),
+    body("role").optional().isIn(["SUPER_ADMIN", "DEPT_LEADER", "OFFICER", "ADMIN_VILLAGE", "VIEWER"]),
+    body("isActive").optional().isBoolean(),
+    body("canSendNotification").optional().isBoolean(),
+    body("categoryIds").optional().isArray(),
+    body("villageIds").optional().isArray(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { hoTen, role, isActive, canSendNotification, categoryIds, villageIds } = req.body;
+      const dataToUpdate = {};
+      if (hoTen !== undefined) dataToUpdate.hoTen = hoTen;
+      if (role !== undefined) dataToUpdate.role = role;
+      if (isActive !== undefined) dataToUpdate.isActive = isActive;
+      if (canSendNotification !== undefined) dataToUpdate.canSendNotification = canSendNotification;
+      if (categoryIds !== undefined) dataToUpdate.categoryIds = categoryIds;
+      
+      const updated = await AdminUserRepo.update(req.params.id, dataToUpdate, villageIds);
+      const { passwordHash: _, ...safeUser } = updated;
+      ok(res, safeUser, "Cập nhật tài khoản thành công");
+    } catch (err) { next(err); }
+  }
+);
 
 // PUT /api/auth/users/:id/notify-permission  (chỉ SUPER_ADMIN)
 router.put(

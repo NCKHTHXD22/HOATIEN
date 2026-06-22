@@ -4,22 +4,27 @@ import { Plus, Filter, Users, UserCheck, UserX, Eye, EyeOff, Pencil, Lock, Unloc
 import { PageHeader, PrimaryBtn, SecondaryBtn, DataTable, Tabs, SearchInput, StatCard, Badge, Modal, Select, FormInput } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import * as authService from '../services/authService'
+import { api } from '../lib/api'
 
 const ROLE_LABEL = {
   SUPER_ADMIN:   { label: 'Quản trị viên', variant: 'purple' },
+  DEPT_LEADER:   { label: 'Lãnh đạo phòng', variant: 'orange' },
+  OFFICER:       { label: 'Cán bộ thụ lý', variant: 'green' },
   ADMIN_VILLAGE: { label: 'CB thôn',       variant: 'blue' },
   VIEWER:        { label: 'Xem',           variant: 'default' },
 }
 
 const ROLE_OPTIONS = [
   { value: 'SUPER_ADMIN',   label: 'Quản trị viên (Super Admin)' },
+  { value: 'DEPT_LEADER',   label: 'Lãnh đạo phòng (Dept Leader)' },
+  { value: 'OFFICER',       label: 'Cán bộ thụ lý (Officer)' },
   { value: 'ADMIN_VILLAGE', label: 'Cán bộ thôn (Admin Village)' },
   { value: 'VIEWER',        label: 'Chỉ xem (Viewer)' },
 ]
 
-const COLUMNS = ['Họ tên', 'Tên đăng nhập', 'Phân quyền', 'Trạng thái', 'Gửi TB', 'Ngày tạo', '']
+const COLUMNS = ['Họ tên', 'Tên đăng nhập', 'Phân quyền', 'Lĩnh vực', 'Trạng thái', 'Gửi TB', 'Ngày tạo', '']
 
-const EMPTY_FORM = { hoTen: '', username: '', password: '', role: 'VIEWER' }
+const EMPTY_FORM = { hoTen: '', username: '', password: '', role: 'VIEWER', categoryIds: [] }
 
 export default function NhanSu() {
   const { user: currentUser } = useAuth()
@@ -28,10 +33,12 @@ export default function NhanSu() {
   const [tab, setTab] = useState('Tất cả')
   const [search, setSearch] = useState('')
   const [users, setUsers] = useState([])
+  const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Add modal
+  // Add/Edit modal state
   const [showAdd, setShowAdd] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [showPwd, setShowPwd] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -47,6 +54,18 @@ export default function NhanSu() {
     }
   }
 
+  const handleToggleActive = async (u) => {
+    const next = !u.isActive
+    const actionText = next ? 'Mở khóa' : 'Khóa'
+    if (!window.confirm(`Xác nhận ${actionText.toLowerCase()} tài khoản này?`)) return
+    try {
+      await authService.updateUser(u.id, { isActive: next })
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: next } : x))
+    } catch (e) {
+      alert(e.response?.data?.message || `${actionText} thất bại`)
+    }
+  }
+
   const loadUsers = () => {
     if (!isSuperAdmin) { setLoading(false); return }
     authService.getUsers()
@@ -55,8 +74,18 @@ export default function NhanSu() {
       .finally(() => setLoading(false))
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadUsers() }, [isSuperAdmin])
+  const loadCategories = () => {
+    api.get('/api/categories')
+      .then(res => setCategories(res.data.categories || []))
+      .catch(console.error)
+  }
+
+  useEffect(() => {
+    loadUsers()
+    if (isSuperAdmin) {
+      loadCategories()
+    }
+  }, [isSuperAdmin])
 
   const filtered = users.filter(u => {
     const matchTab = tab === 'Tất cả'
@@ -78,6 +107,21 @@ export default function NhanSu() {
 
   const openAdd = () => {
     setForm(EMPTY_FORM)
+    setEditingUser(null)
+    setError('')
+    setShowPwd(false)
+    setShowAdd(true)
+  }
+
+  const openEdit = (u) => {
+    setForm({
+      hoTen: u.hoTen || '',
+      username: u.username || '',
+      password: '',
+      role: u.role || 'VIEWER',
+      categoryIds: u.categoryIds || []
+    })
+    setEditingUser(u)
     setError('')
     setShowPwd(false)
     setShowAdd(true)
@@ -98,6 +142,26 @@ export default function NhanSu() {
       loadUsers()
     } catch (e) {
       setError(e.response?.data?.message || 'Tạo tài khoản thất bại')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEdit = async () => {
+    if (!form.hoTen.trim()) { setError('Vui lòng nhập họ tên'); return }
+    setSaving(true)
+    setError('')
+    try {
+      await authService.updateUser(editingUser.id, {
+        hoTen: form.hoTen,
+        role: form.role,
+        categoryIds: form.categoryIds || []
+      })
+      setShowAdd(false)
+      setLoading(true)
+      loadUsers()
+    } catch (e) {
+      setError(e.response?.data?.message || 'Cập nhật tài khoản thất bại')
     } finally {
       setSaving(false)
     }
@@ -146,12 +210,21 @@ export default function NhanSu() {
             ) : (
               filtered.map(u => {
                 const role = ROLE_LABEL[u.role] || { label: u.role, variant: 'default' }
+                const userCats = u.categoryIds || []
+                const catNames = userCats.map(cid => {
+                  const found = categories.find(c => c._id === cid)
+                  return found ? `${found.icon} ${found.name}` : ''
+                }).filter(Boolean).join(', ')
+
                 return (
                   <tr key={u.id} className="border-b border-border hover:bg-secondary/50 transition-colors">
                     <td className="px-5 py-3 text-sm font-semibold text-foreground">{u.hoTen}</td>
                     <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{u.username}</td>
                     <td className="px-5 py-3">
                       <Badge variant={role.variant}>{role.label}</Badge>
+                    </td>
+                    <td className="px-5 py-3 text-xs text-slate-500 max-w-[200px] truncate" title={catNames}>
+                      {catNames || '—'}
                     </td>
                     <td className="px-5 py-3">
                       <Badge variant={u.isActive ? 'green' : 'red'}>
@@ -184,13 +257,15 @@ export default function NhanSu() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1">
                         <button
-                          className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors"
+                          onClick={() => openEdit(u)}
+                          className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors cursor-pointer"
                           title="Chỉnh sửa"
                         >
                           <Pencil size={13} />
                         </button>
                         <button
-                          className={`p-1.5 rounded hover:bg-secondary transition-colors ${u.isActive ? 'text-muted-foreground hover:text-destructive' : 'text-muted-foreground hover:text-green-600'}`}
+                          onClick={() => handleToggleActive(u)}
+                          className={`p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer ${u.isActive ? 'text-muted-foreground hover:text-destructive' : 'text-muted-foreground hover:text-green-600'}`}
                           title={u.isActive ? 'Khóa tài khoản' : 'Mở khóa'}
                         >
                           {u.isActive ? <Lock size={13} /> : <Unlock size={13} />}
@@ -209,16 +284,16 @@ export default function NhanSu() {
         </div>
       )}
 
-      {/* Modal Thêm tài khoản */}
+      {/* Modal Thêm/Sửa tài khoản */}
       <Modal
-        title="Thêm tài khoản mới"
+        title={editingUser ? "Chỉnh sửa tài khoản" : "Thêm tài khoản mới"}
         open={showAdd}
         onClose={() => setShowAdd(false)}
         footer={
           <>
             <SecondaryBtn onClick={() => setShowAdd(false)}>Hủy</SecondaryBtn>
-            <PrimaryBtn onClick={handleAdd} disabled={saving}>
-              {saving ? 'Đang lưu...' : 'Tạo tài khoản'}
+            <PrimaryBtn onClick={editingUser ? handleEdit : handleAdd} disabled={saving}>
+              {saving ? 'Đang lưu...' : (editingUser ? 'Cập nhật' : 'Tạo tài khoản')}
             </PrimaryBtn>
           </>
         }
@@ -233,40 +308,74 @@ export default function NhanSu() {
           value={form.hoTen}
           onChange={e => setForm(f => ({ ...f, hoTen: e.target.value }))}
         />
-        <FormInput
-          label="Tên đăng nhập"
-          required
-          placeholder="nguyenvana (tối thiểu 3 ký tự)"
-          value={form.username}
-          onChange={e => setForm(f => ({ ...f, username: e.target.value.trim() }))}
-        />
-        <div>
-          <label className="block text-xs font-semibold text-foreground mb-1.5">
-            Mật khẩu <span className="text-destructive">*</span>
-          </label>
-          <div className="relative">
-            <input
-              type={showPwd ? 'text' : 'password'}
-              placeholder="Tối thiểu 6 ký tự"
-              value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              className="w-full px-3 py-2 pr-10 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none"
+        {!editingUser && (
+          <>
+            <FormInput
+              label="Tên đăng nhập"
+              required
+              placeholder="nguyenvana (tối thiểu 3 ký tự)"
+              value={form.username}
+              onChange={e => setForm(f => ({ ...f, username: e.target.value.trim() }))}
             />
-            <button
-              type="button"
-              onClick={() => setShowPwd(v => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
-            </button>
-          </div>
-        </div>
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1.5">
+                Mật khẩu <span className="text-destructive">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  placeholder="Tối thiểu 6 ký tự"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  className="w-full px-3 py-2 pr-10 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
         <Select
           label="Phân quyền"
           value={form.role}
           onChange={val => setForm(f => ({ ...f, role: val }))}
           options={ROLE_OPTIONS}
         />
+
+        {(form.role === 'DEPT_LEADER' || form.role === 'OFFICER') && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-foreground">
+              Lĩnh vực phụ trách
+            </label>
+            <div className="grid grid-cols-2 gap-2 bg-secondary/35 p-3 rounded-lg border border-border">
+              {categories.map(c => {
+                const checked = form.categoryIds?.includes(c._id)
+                return (
+                  <label key={c._id} className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...(form.categoryIds || []), c._id]
+                          : (form.categoryIds || []).filter(x => x !== c._id)
+                        setForm(f => ({ ...f, categoryIds: next }))
+                      }}
+                      className="rounded border-slate-300"
+                    />
+                    <span>{c.icon} {c.name}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="text-xs text-muted-foreground bg-secondary rounded-md px-3 py-2">
           <strong>Lưu ý:</strong> Tài khoản mới sẽ được kích hoạt ngay sau khi tạo.
         </div>
