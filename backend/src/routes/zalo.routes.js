@@ -18,7 +18,22 @@ router.post("/webhook", async (req, res) => {
     // Dùng sender.id (= user_id, KHỚP getfollowers/danh bạ), KHÔNG dùng user_id_by_app (id khác hệ → sinh follower trùng)
     const userId = sender?.id || req.body.user_id_by_app;
 
-    if (!userId || !message?.text) {
+    if (!userId) {
+      return res.status(200).json({ error: 0 });
+    }
+
+    // Ảnh người dùng gửi (dùng cho bước đính kèm ảnh của luồng phản ánh)
+    if (req.body.event_name === "user_send_image" || message?.attachments?.length) {
+      const feedbackChat = require("../services/feedbackChat");
+      const urls = (message?.attachments || [])
+        .filter((a) => a.type === "image")
+        .map((a) => a.payload?.url || a.payload?.thumbnail)
+        .filter(Boolean);
+      for (const url of urls) feedbackChat.handleImage(userId, url).catch(() => {});
+      return res.status(200).json({ error: 0 });
+    }
+
+    if (!message?.text) {
       return res.status(200).json({ error: 0 });
     }
 
