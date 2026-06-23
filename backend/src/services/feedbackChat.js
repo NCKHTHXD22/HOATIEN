@@ -1,6 +1,6 @@
 // Luồng thu thập phản ánh qua chatbot Zalo (port từ An Hải, adapt cho HOATIEN)
 const { sendText } = require("../utils/zaloBroadcast");
-const { uploadFromUrl, uploadFromZaloImageUrl } = require("../utils/cloudinaryUpload");
+const { uploadFromUrl, uploadFromZaloImageUrl, uploadFromZaloVideoUrl } = require("../utils/cloudinaryUpload");
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const Feedback = require("../models/mongo/Feedback");
 const Category = require("../models/mongo/Category");
@@ -8,6 +8,7 @@ const { setState, getState, clearState } = require("./chatState");
 const logger = require("../utils/logger");
 
 const MAX_IMAGES = 5;
+const MAX_VIDEOS = 2;
 const BATCH_DELAY_MS = 3000;
 const imageBatchBuffer = new Map();
 
@@ -60,25 +61,27 @@ async function sendCategoryMenu(userId) {
 async function sendImagePrompt(userId, count) {
   if (count === 0) {
     await send(userId,
-      `📎 Bạn có muốn gửi hình ảnh minh hoạ không? (Tối đa ${MAX_IMAGES} ảnh)\n\n` +
-      "• Gửi 1 hoặc nhiều ảnh từ điện thoại\n• Hoặc gửi URL ảnh\n\n1️⃣ Gõ số 1 để bỏ qua"
+      `📎 Bạn có muốn gửi hình ảnh / video minh hoạ không? (Tối đa ${MAX_IMAGES} ảnh, ${MAX_VIDEOS} video)\n\n` +
+      "• Gửi ảnh hoặc video trực tiếp từ điện thoại\n• Hoặc gửi URL ảnh\n\n1️⃣ Gõ số 1 để bỏ qua"
     );
   } else {
     await send(userId,
       `✅ Đã có ${count}/${MAX_IMAGES} ảnh\n\n` +
-      `${count < MAX_IMAGES ? "• Gửi thêm ảnh\n" : ""}• Nhắn "xong" để tiếp tục`
+      `${count < MAX_IMAGES ? "• Gửi thêm ảnh/video\n" : ""}• Nhắn "xong" để tiếp tục`
     );
   }
 }
 
 async function sendConfirmation(userId, state) {
   const imgs = state.imageUrls || [];
+  const vids = state.videoUrls || [];
   await send(userId,
     "📋 Xác nhận phản ánh:\n" +
     `• Liên hệ: ${state.contact}\n` +
     `• Loại: ${state.linhVuc || "Chưa chọn"}\n` +
     `• Nội dung: ${state.content}\n` +
-    `• Hình ảnh: ${imgs.length > 0 ? `✅ ${imgs.length} ảnh` : "❌ Không có"}\n\n` +
+    `• Hình ảnh: ${imgs.length > 0 ? `✅ ${imgs.length} ảnh` : "❌ Không có"}\n` +
+    `• Video: ${vids.length > 0 ? `✅ ${vids.length} video` : "❌ Không có"}\n\n` +
     "Trả lời bằng số:\n1️⃣ Xác nhận gửi\n2️⃣ Nhập lại\n3️⃣ Huỷ"
   );
 }
@@ -124,7 +127,7 @@ async function handleText(userId, text, displayName) {
 
   if (state.step === "waiting_content") {
     if (text.trim().length < 5) { await send(userId, "⚠️ Nội dung quá ngắn (tối thiểu 5 ký tự)."); return; }
-    setState(userId, { ...state, step: "waiting_image", content: text.trim(), imageUrls: [] });
+    setState(userId, { ...state, step: "waiting_image", content: text.trim(), imageUrls: [], videoUrls: [] });
     await sendImagePrompt(userId, 0);
     return;
   }
@@ -180,6 +183,28 @@ async function handleText(userId, text, displayName) {
   }
 }
 
+async function handleVideo(userId, videoUrl) {
+  const state = getState(userId);
+  if (!state || state.step !== "waiting_image") return;
+  const vids = state.videoUrls || [];
+  if (vids.length >= MAX_VIDEOS) {
+    await send(userId, `⚠️ Đã đạt tối đa ${MAX_VIDEOS} video. Nhắn "xong" để tiếp tục.`);
+    return;
+  }
+  await send(userId, "⏳ Đang tải video lên, có thể mất chút thời gian...");
+  try {
+    const url = await uploadFromZaloVideoUrl(videoUrl);
+    const fresh = getState(userId);
+    if (!fresh || fresh.step !== "waiting_image") return;
+    const newVids = [...(fresh.videoUrls || []), url].slice(0, MAX_VIDEOS);
+    setState(userId, { ...fresh, videoUrls: newVids });
+    await send(userId, `✅ Đã thêm video (${newVids.length}/${MAX_VIDEOS})\n\nGửi thêm ảnh/video hoặc nhắn "xong" để tiếp tục.`);
+  } catch (e) {
+    logger.error(`[Feedback] upload video ${userId}: ${e.message}`);
+    await send(userId, '⚠️ Không tải được video (có thể do dung lượng quá lớn). Thử video ngắn hơn hoặc nhắn "xong".');
+  }
+}
+
 async function handleImage(userId, imageUrl) {
   const state = getState(userId);
   if (!state || state.step !== "waiting_image") return;
@@ -230,9 +255,10 @@ async function saveFeedback(userId, state) {
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + 3);
     const imageUrls = state.imageUrls || [];
+    const videoUrls = state.videoUrls || [];
     const fb = await Feedback.create({
       userId, displayName, contact: state.contact, content: state.content,
-      imageUrl: imageUrls[0] || "", imageUrls, linhVuc: state.linhVuc || "",
+      imageUrl: imageUrls[0] || "", imageUrls, videoUrls, linhVuc: state.linhVuc || "",
       categoryId: state.categoryId || null, deadline,
     });
 
@@ -250,11 +276,13 @@ async function saveFeedback(userId, state) {
 
     // Thông báo vào nhóm Zalo của lĩnh vực (nếu có)
     if (state.categoryGroupId) {
-      const imgInfo = imageUrls.length ? `🖼️ ${imageUrls.length} ảnh` : "🖼️ Không ảnh";
+      const mediaInfo =
+        (imageUrls.length ? `🖼️ ${imageUrls.length} ảnh` : "🖼️ Không ảnh") +
+        (videoUrls.length ? ` · 🎬 ${videoUrls.length} video` : "");
       const groupMsg =
         `📩 PHẢN ÁNH MỚI #${code}\n${"─".repeat(26)}\n` +
         (displayName ? `👤 ${displayName}\n` : "") +
-        `📞 ${state.contact}\n🏷️ ${state.linhVuc}\n📝 ${state.content}\n${imgInfo}`;
+        `📞 ${state.contact}\n🏷️ ${state.linhVuc}\n📝 ${state.content}\n${mediaInfo}`;
       sendText(state.categoryGroupId, groupMsg, true).catch(() => {});
     }
   } catch (err) {
@@ -263,4 +291,4 @@ async function saveFeedback(userId, state) {
   }
 }
 
-module.exports = { startFeedback, handleText, handleImage, isFeedbackTrigger, getState };
+module.exports = { startFeedback, handleText, handleImage, handleVideo, isFeedbackTrigger, getState };

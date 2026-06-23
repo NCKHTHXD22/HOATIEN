@@ -199,6 +199,19 @@ export default function PhanAnhDetail() {
                   </div>
                 ) : null
               })()}
+
+              {fb.videoUrls?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Video đính kèm ({fb.videoUrls.length})
+                  </p>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {fb.videoUrls.map((url, i) => (
+                      <video key={i} src={url} controls className="w-full rounded-xl border border-slate-200 bg-black" />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

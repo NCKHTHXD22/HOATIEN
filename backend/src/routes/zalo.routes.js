@@ -24,14 +24,20 @@ router.post("/webhook", async (req, res) => {
 
     ZaloEvent.create({ type: "WEBHOOK", zaloUserId: String(userId), payload: req.body }).catch(() => {});
 
-    // Ảnh người dùng gửi (dùng cho bước đính kèm ảnh của luồng phản ánh)
-    if (req.body.event_name === "user_send_image" || message?.attachments?.length) {
+    // Ảnh / video người dùng gửi (dùng cho bước đính kèm của luồng phản ánh)
+    if (req.body.event_name === "user_send_image" || req.body.event_name === "user_send_video" || message?.attachments?.length) {
       const feedbackChat = require("../services/feedbackChat");
-      const urls = (message?.attachments || [])
+      const atts = message?.attachments || [];
+      const imageUrls = atts
         .filter((a) => a.type === "image")
         .map((a) => a.payload?.url || a.payload?.thumbnail)
         .filter(Boolean);
-      for (const url of urls) feedbackChat.handleImage(userId, url).catch(() => {});
+      const videoUrls = atts
+        .filter((a) => a.type === "video")
+        .map((a) => a.payload?.url)
+        .filter(Boolean);
+      for (const url of imageUrls) feedbackChat.handleImage(userId, url).catch(() => {});
+      for (const url of videoUrls) feedbackChat.handleVideo(userId, url).catch(() => {});
       return res.status(200).json({ error: 0 });
     }
 

@@ -44,4 +44,10 @@ async function uploadFromZaloImageUrl(zaloUrl) {
   return uploadFromBuffer(Buffer.from(res.data), `zalo-${Date.now()}`);
 }
 
-module.exports = { uploadFromUrl, uploadFromBuffer, uploadVideoFromBuffer, uploadRawFromBuffer, uploadFromZaloImageUrl };
+// Video Zalo có thể nặng -> để Cloudinary tự fetch từ URL (không buffer trong Node)
+async function uploadFromZaloVideoUrl(zaloUrl) {
+  const r = await cloudinary.uploader.upload(zaloUrl, { folder: FOLDER, resource_type: "video" });
+  return r.secure_url;
+}
+
+module.exports = { uploadFromUrl, uploadFromBuffer, uploadVideoFromBuffer, uploadRawFromBuffer, uploadFromZaloImageUrl, uploadFromZaloVideoUrl };
