@@ -389,6 +389,23 @@ router.get("/surveys/:id/results", authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/notify/surveys/:id/public — lấy khảo sát để điền (KHÔNG cần auth, không trả kết quả)
+router.get("/surveys/:id/public", async (req, res, next) => {
+  try {
+    const survey = await SurveyRepo.findById(req.params.id);
+    if (!survey) return notFound(res, "Không tìm thấy khảo sát");
+    ok(res, {
+      id: survey.id,
+      tieuDe: survey.tieuDe,
+      isActive: survey.isActive,
+      deadline: survey.deadline,
+      questions: (survey.questions || []).map((q) => ({
+        id: q.id, cauHoi: q.cauHoi, loai: q.loai, luaChon: q.luaChon, thuTu: q.thuTu,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /api/notify/surveys/:id/respond  — trả lời khảo sát (không cần auth)
 router.post("/surveys/:id/respond", async (req, res, next) => {
   try {

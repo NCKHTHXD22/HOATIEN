@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, FolderOpen, Newspaper, FileText,
+  LayoutDashboard, FolderOpen,
   Users, BarChart3, Settings, LogOut, MapPin,
-  Bell, UserRound, ClipboardList, PieChart, ArrowRightLeft,
+  Bell, UsersRound, ClipboardList, PieChart, ArrowRightLeft,
 } from 'lucide-react'
 import clsx from 'clsx'
 import hoaTienLogo from '../assets/hoa-tien-logo.jpg'
@@ -18,18 +18,13 @@ const navGroups = [
       { to: '/ho-so',     icon: FolderOpen,     label: 'Hồ sơ dân cư' },
       { to: '/thon-xom',  icon: MapPin,         label: 'Thôn / Địa bàn' },
       { to: '/bien-dong', icon: ArrowRightLeft, label: 'Biến động dân cư' },
-      { to: '/van-ban',   icon: FileText,       label: 'Quản lý văn bản' },
     ],
-  },
-  {
-    label: 'Nội dung',
-    items: [{ to: '/tin-tuc', icon: Newspaper, label: 'Tin tức / Thông báo' }],
   },
   {
     label: 'Thông báo',
     items: [
-      { to: '/thong-bao',  icon: Bell,          label: 'Soạn & Gửi thông báo' },
-      { to: '/nguoi-nhan', icon: UserRound,      label: 'Người nhận / Nhóm' },
+      { to: '/thong-bao',  icon: Bell,          label: 'Gửi tin Zalo' },
+      { to: '/nhom-zalo',  icon: UsersRound,     label: 'Cài đặt nhóm Zalo' },
       { to: '/khao-sat',   icon: ClipboardList,  label: 'Khảo sát nhanh' },
       { to: '/bao-cao-tb', icon: PieChart,       label: 'Báo cáo hiệu quả' },
     ],

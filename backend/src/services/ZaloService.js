@@ -9,11 +9,14 @@ const MemberRepo = require("../repositories/pg/MemberRepo");
 const { formatZaloReply } = require("../utils/zaloFormat");
 const logger = require("../utils/logger");
 
+const feedbackChat = require("./feedbackChat");
+
 const MENU_TEXT =
   "Xin chào! Vui lòng chọn cách tra cứu:\n" +
   "1. Tra cứu theo tên\n" +
   "2. Tra cứu theo CCCD\n" +
-  "3. Tra cứu theo số điện thoại";
+  "3. Tra cứu theo số điện thoại\n\n" +
+  'Hoặc nhắn "phản ánh" để gửi góp ý / phản ánh.';
 
 function stateMachine(session, text) {
   const t = text.trim();
@@ -42,6 +45,12 @@ function stateMachine(session, text) {
 }
 
 async function handleMessage(zaloUserId, text) {
+  // Luồng phản ánh: nếu đang trong luồng hoặc kích hoạt -> xử lý riêng (không đụng tra cứu hộ khẩu)
+  if (feedbackChat.getState(zaloUserId) || feedbackChat.isFeedbackTrigger(text)) {
+    await feedbackChat.handleText(zaloUserId, text);
+    return null;
+  }
+
   const session = (await ZaloSessionRepo.getOrCreate(zaloUserId)) || { state: "IDLE" };
   const { nextState, reply, query, queryType } = stateMachine(session, text);
 

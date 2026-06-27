@@ -20,11 +20,11 @@ async function login(username, password) {
   return { token, user: safeUser };
 }
 
-async function createUser({ username, password, hoTen, role, villageIds }) {
+async function createUser({ username, password, hoTen, role, villageIds, categoryIds }) {
   const exists = await AdminUserRepo.findByUsername(username);
   if (exists) throw new Error("Username đã tồn tại");
   const passwordHash = await bcrypt.hash(password, 10);
-  return AdminUserRepo.create({ username, passwordHash, hoTen, role }, villageIds);
+  return AdminUserRepo.create({ username, passwordHash, hoTen, role, categoryIds }, villageIds);
 }
 
 async function changePassword(userId, oldPassword, newPassword) {

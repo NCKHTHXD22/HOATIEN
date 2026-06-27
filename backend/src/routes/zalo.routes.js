@@ -18,16 +18,36 @@ router.post("/webhook", async (req, res) => {
     // Dùng sender.id (= user_id, KHỚP getfollowers/danh bạ), KHÔNG dùng user_id_by_app (id khác hệ → sinh follower trùng)
     const userId = sender?.id || req.body.user_id_by_app;
 
-    // Người mới follow OA → thêm ngay vào danh sách follower, không cần đợi đồng bộ thủ công
-    if (req.body.event_name === "follow") {
-      if (userId) {
-        ZaloEvent.create({ type: "WEBHOOK", zaloUserId: userId, payload: req.body }).catch(() => {});
-        ZaloService.handleFollow(userId).catch((e) => logger.error(`handleFollow: ${e.message}`));
-      }
+    if (!userId) {
       return res.status(200).json({ error: 0 });
     }
 
-    if (!userId || !message?.text) {
+    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: String(userId), payload: req.body }).catch(() => {});
+
+    // Người mới follow OA → thêm ngay vào danh sách follower, không cần đợi đồng bộ thủ công
+    if (req.body.event_name === "follow") {
+      ZaloService.handleFollow(userId).catch((e) => logger.error(`handleFollow: ${e.message}`));
+      return res.status(200).json({ error: 0 });
+    }
+
+    // Ảnh / video người dùng gửi (dùng cho bước đính kèm của luồng phản ánh)
+    if (req.body.event_name === "user_send_image" || req.body.event_name === "user_send_video" || message?.attachments?.length) {
+      const feedbackChat = require("../services/feedbackChat");
+      const atts = message?.attachments || [];
+      const imageUrls = atts
+        .filter((a) => a.type === "image")
+        .map((a) => a.payload?.url || a.payload?.thumbnail)
+        .filter(Boolean);
+      const videoUrls = atts
+        .filter((a) => a.type === "video")
+        .map((a) => a.payload?.url)
+        .filter(Boolean);
+      for (const url of imageUrls) feedbackChat.handleImage(userId, url).catch(() => {});
+      for (const url of videoUrls) feedbackChat.handleVideo(userId, url).catch(() => {});
+      return res.status(200).json({ error: 0 });
+    }
+
+    if (!message?.text) {
       return res.status(200).json({ error: 0 });
     }
 
@@ -35,8 +55,6 @@ router.post("/webhook", async (req, res) => {
     if (req.body.event_name !== "user_send_text") {
       return res.status(200).json({ error: 0 });
     }
-
-    ZaloEvent.create({ type: "WEBHOOK", zaloUserId: userId, payload: req.body }).catch(() => {});
 
     const reply = await ZaloService.handleMessage(userId, message.text);
     logger.info(`Zalo webhook [${userId}]: "${message.text}" → replied`);

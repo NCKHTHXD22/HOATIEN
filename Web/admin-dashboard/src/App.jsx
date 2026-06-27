@@ -11,8 +11,9 @@ import BaoCao from './pages/BaoCao'
 import CaiDat from './pages/CaiDat'
 import ThonXom from './pages/ThonXom'
 import BienDong from './pages/BienDong'
-import ThongBao from './pages/ThongBao'
-import NguoiNhan from './pages/NguoiNhan'
+import MessagesPage from './pages/MessagesPage'
+import SettingsPage from './pages/SettingsPage'
+import SurveyFill from './pages/SurveyFill'
 import KhaoSat from './pages/KhaoSat'
 import BaoCaoThongBao from './pages/BaoCaoThongBao'
 
@@ -25,6 +26,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/ks/:id" element={<SurveyFill />} />
       <Route
         path="/"
         element={
@@ -43,8 +45,9 @@ function AppRoutes() {
         <Route path="nhan-su"  element={<NhanSu />} />
         <Route path="bao-cao"  element={<BaoCao />} />
         <Route path="cai-dat"  element={<CaiDat />} />
-        <Route path="thong-bao"      element={<ThongBao />} />
-        <Route path="nguoi-nhan"     element={<NguoiNhan />} />
+        <Route path="thong-bao"      element={<MessagesPage />} />
+        <Route path="nhom-zalo"      element={<SettingsPage />} />
+        <Route path="nguoi-nhan"     element={<Navigate to="/thong-bao" replace />} />
         <Route path="khao-sat"       element={<KhaoSat />} />
         <Route path="bao-cao-tb"     element={<BaoCaoThongBao />} />
       </Route>

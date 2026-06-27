@@ -8,5 +8,10 @@ router.use("/movements",  require("./movement.routes"));
 router.use("/reports",    require("./report.routes"));
 router.use("/zalo",       require("./zalo.routes"));
 router.use("/notify",     require("./notification.routes"));
+router.use("/broadcast",  require("./broadcast"));
+router.use("/feedbacks",  require("./feedback.routes"));
+router.use("/categories", require("./category.routes"));
+router.use("/alerts",     require("./alert.routes"));
+router.use("/users",      require("./user.routes"));
 
 module.exports = router;
