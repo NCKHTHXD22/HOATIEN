@@ -1,6 +1,6 @@
 import '../styles/cai-dat.css'
 import { useState, useEffect } from 'react'
-import { Save, Globe, Bell, Shield, Key, Users, Eye, EyeOff, CheckCircle, Plus, Lock } from 'lucide-react'
+import { Save, Globe, Bell, Shield, Key, Users, Eye, EyeOff, CheckCircle, Plus, Lock, Pencil } from 'lucide-react'
 import { PageHeader, PrimaryBtn, SecondaryBtn, Input, Modal, Select, FormInput, Badge } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import * as authService from '../services/authService'
@@ -15,11 +15,15 @@ const menu = [
 
 const ROLE_LABEL = {
   SUPER_ADMIN:   { label: 'Quản trị viên', desc: 'Toàn quyền hệ thống', variant: 'purple' },
+  DEPT_LEADER:   { label: 'Lãnh đạo phòng', desc: 'Giao việc & xem theo lĩnh vực', variant: 'orange' },
+  OFFICER:       { label: 'Cán bộ thụ lý',  desc: 'Xử lý phản ánh theo lĩnh vực', variant: 'green' },
   ADMIN_VILLAGE: { label: 'Cán bộ thôn',   desc: 'Quản lý hộ dân & thông báo', variant: 'blue' },
   VIEWER:        { label: 'Chỉ xem',       desc: 'Chỉ xem, không chỉnh sửa', variant: 'default' },
 }
 const ROLE_OPTIONS = [
   { value: 'SUPER_ADMIN',   label: 'Quản trị viên (Super Admin)' },
+  { value: 'DEPT_LEADER',   label: 'Lãnh đạo phòng (Dept Leader)' },
+  { value: 'OFFICER',       label: 'Cán bộ thụ lý (Officer)' },
   { value: 'ADMIN_VILLAGE', label: 'Cán bộ thôn (Admin Village)' },
   { value: 'VIEWER',        label: 'Chỉ xem (Viewer)' },
 ]
@@ -187,10 +191,12 @@ function UsersPanel({ currentUser }) {
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN'
 
   const [showAdd, setShowAdd] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [showPwd, setShowPwd] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [viewUser, setViewUser] = useState(null)
 
   const loadUsers = () => {
     if (!isSuperAdmin) { setLoading(false); return }
@@ -205,21 +211,32 @@ function UsersPanel({ currentUser }) {
 
   if (!isSuperAdmin) return <div className="text-sm text-muted-foreground py-8 text-center">Cần quyền SUPER_ADMIN để xem tính năng này.</div>
 
-  const openAdd = () => { setForm(EMPTY_FORM); setError(''); setShowPwd(false); setShowAdd(true) }
+  const openAdd = () => { setForm(EMPTY_FORM); setEditingUser(null); setError(''); setShowPwd(false); setShowAdd(true) }
+  const openEdit = (u) => {
+    setForm({ hoTen: u.hoTen || '', username: u.username || '', password: '', role: u.role || 'VIEWER' })
+    setEditingUser(u)
+    setError(''); setShowPwd(false); setShowAdd(true)
+  }
   const handleAdd = async () => {
     if (!form.hoTen.trim())       { setError('Vui lòng nhập họ tên'); return }
-    if (!form.username.trim())    { setError('Vui lòng nhập tên đăng nhập'); return }
-    if (form.username.length < 3) { setError('Tên đăng nhập phải có ít nhất 3 ký tự'); return }
-    if (!form.password)           { setError('Vui lòng nhập mật khẩu'); return }
-    if (form.password.length < 6) { setError('Mật khẩu phải có ít nhất 6 ký tự'); return }
+    if (!editingUser) {
+      if (!form.username.trim())    { setError('Vui lòng nhập tên đăng nhập'); return }
+      if (form.username.length < 3) { setError('Tên đăng nhập phải có ít nhất 3 ký tự'); return }
+      if (!form.password)           { setError('Vui lòng nhập mật khẩu'); return }
+      if (form.password.length < 6) { setError('Mật khẩu phải có ít nhất 6 ký tự'); return }
+    }
     setSaving(true); setError('')
     try {
-      await authService.createUser(form)
+      if (editingUser) {
+        await authService.updateUser(editingUser.id, { hoTen: form.hoTen, role: form.role })
+      } else {
+        await authService.createUser(form)
+      }
       setShowAdd(false)
       setLoading(true)
       loadUsers()
     } catch (e) {
-      setError(e.response?.data?.message || 'Tạo tài khoản thất bại')
+      setError(e.response?.data?.message || (editingUser ? 'Cập nhật tài khoản thất bại' : 'Tạo tài khoản thất bại'))
     } finally {
       setSaving(false)
     }
@@ -248,6 +265,20 @@ function UsersPanel({ currentUser }) {
                   <span className={`text-xs font-semibold ${u.isActive ? 'text-emerald-600' : 'text-red-500'}`}>
                     {u.isActive ? 'Hoạt động' : 'Bị khóa'}
                   </span>
+                  <button
+                    onClick={() => setViewUser(u)}
+                    title="Xem thông tin"
+                    className="p-1.5 rounded hover:bg-card text-muted-foreground hover:text-blue-500 transition-colors"
+                  >
+                    <Eye size={14} />
+                  </button>
+                  <button
+                    onClick={() => openEdit(u)}
+                    title="Chỉnh sửa"
+                    className="p-1.5 rounded hover:bg-card text-muted-foreground hover:text-amber-500 transition-colors"
+                  >
+                    <Pencil size={14} />
+                  </button>
                 </div>
               </div>
             )
@@ -255,32 +286,62 @@ function UsersPanel({ currentUser }) {
         </div>
       )}
 
-      <Modal title="Thêm tài khoản mới" open={showAdd} onClose={() => setShowAdd(false)}
-        footer={<><SecondaryBtn onClick={() => setShowAdd(false)}>Hủy</SecondaryBtn><PrimaryBtn onClick={handleAdd} disabled={saving}>{saving ? 'Đang lưu...' : 'Tạo tài khoản'}</PrimaryBtn></>}>
+      <Modal title={editingUser ? 'Chỉnh sửa tài khoản' : 'Thêm tài khoản mới'} open={showAdd} onClose={() => setShowAdd(false)}
+        footer={<><SecondaryBtn onClick={() => setShowAdd(false)}>Hủy</SecondaryBtn><PrimaryBtn onClick={handleAdd} disabled={saving}>{saving ? 'Đang lưu...' : (editingUser ? 'Cập nhật' : 'Tạo tài khoản')}</PrimaryBtn></>}>
         {error && <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">{error}</p>}
         <FormInput label="Họ và tên" required placeholder="Nguyễn Văn A" value={form.hoTen} onChange={e => setForm(f => ({ ...f, hoTen: e.target.value }))} />
-        <FormInput label="Tên đăng nhập" required placeholder="nguyenvana (tối thiểu 3 ký tự)" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value.trim() }))} />
-        <div>
-          <label className="block text-xs font-semibold text-foreground mb-1.5">Mật khẩu <span className="text-destructive">*</span></label>
-          <div className="relative">
-            <input
-              type={showPwd ? 'text' : 'password'}
-              placeholder="Tối thiểu 6 ký tự"
-              value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              className="w-full px-3 py-2 pr-10 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none"
-            />
-            <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
-            </button>
-          </div>
-        </div>
+        {!editingUser && (
+          <>
+            <FormInput label="Tên đăng nhập" required placeholder="nguyenvana (tối thiểu 3 ký tự)" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value.trim() }))} />
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1.5">Mật khẩu <span className="text-destructive">*</span></label>
+              <div className="relative">
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  placeholder="Tối thiểu 6 ký tự"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  className="w-full px-3 py-2 pr-10 rounded-md text-sm text-foreground bg-card border border-input focus:border-ring focus:ring-2 focus:ring-ring/20 transition-all outline-none"
+                />
+                <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
         <Select label="Phân quyền" value={form.role} onChange={val => setForm(f => ({ ...f, role: val }))} options={ROLE_OPTIONS} />
-        <div className="text-xs text-muted-foreground bg-secondary rounded-md px-3 py-2">
-          <strong>Lưu ý:</strong> Tài khoản mới sẽ được kích hoạt ngay sau khi tạo.
-        </div>
+        {!editingUser && (
+          <div className="text-xs text-muted-foreground bg-secondary rounded-md px-3 py-2">
+            <strong>Lưu ý:</strong> Tài khoản mới sẽ được kích hoạt ngay sau khi tạo.
+          </div>
+        )}
+      </Modal>
+
+      <Modal title="Thông tin tài khoản" open={!!viewUser} onClose={() => setViewUser(null)}
+        footer={<SecondaryBtn onClick={() => setViewUser(null)}>Đóng</SecondaryBtn>}>
+        {viewUser && (
+          <div className="space-y-3">
+            <Row label="Họ tên" value={viewUser.hoTen} />
+            <Row label="Tên đăng nhập" value={viewUser.username} />
+            <Row label="Phân quyền" value={(ROLE_LABEL[viewUser.role] || { label: viewUser.role }).label} />
+            <Row label="Trạng thái" value={viewUser.isActive ? 'Hoạt động' : 'Bị khóa'} />
+            <Row label="Quyền gửi thông báo" value={viewUser.canSendNotification ? 'Có' : 'Không'} />
+            <Row label="Thôn quản lý" value={(viewUser.villages || []).map(v => v.ten).join(', ') || '—'} />
+            <Row label="Ngày tạo" value={viewUser.createdAt ? new Date(viewUser.createdAt).toLocaleDateString('vi-VN') : '—'} />
+          </div>
+        )}
       </Modal>
     </>
+  )
+}
+
+function Row({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-secondary border border-border">
+      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground text-right">{value}</span>
+    </div>
   )
 }
 

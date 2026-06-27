@@ -58,10 +58,10 @@ async function remove(id, performedBy) {
   const old = await HouseholdRepo.findById(id);
   if (!old) throw new Error("Không tìm thấy hộ dân");
 
-  const activeMembers = (old.members || []).filter((m) => m.trangThai === "ACTIVE");
-  if (activeMembers.length > 0) {
+  const remainingMembers = old.members || [];
+  if (remainingMembers.length > 0) {
     throw new Error(
-      `Muốn xóa hộ "${old.soHoKhau}" thì dân không còn ở hộ đó nữa (còn ${activeMembers.length} nhân khẩu).`
+      `Muốn xóa hộ "${old.soHoKhau}" thì dân không còn ở hộ đó nữa (còn ${remainingMembers.length} nhân khẩu, kể cả nhân khẩu đã chuyển đi/đã mất — vui lòng chuyển hoặc xóa hết trước).`
     );
   }
 
