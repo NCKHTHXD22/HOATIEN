@@ -37,6 +37,13 @@ export default function NhanSu() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Edit modal
+  const [showEdit, setShowEdit] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [editForm, setEditForm] = useState({ hoTen: '', role: 'VIEWER' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
+
   const handleToggleNotify = async (u) => {
     const next = !u.canSendNotification
     try {
@@ -44,6 +51,39 @@ export default function NhanSu() {
       setUsers(prev => prev.map(x => x.id === u.id ? { ...x, canSendNotification: next } : x))
     } catch (e) {
       alert(e.response?.data?.message || 'Cập nhật quyền thất bại')
+    }
+  }
+
+  const handleToggleActive = async (u) => {
+    const next = !u.isActive
+    if (!confirm(next ? `Mở khóa tài khoản "${u.hoTen}"?` : `Khóa tài khoản "${u.hoTen}"?`)) return
+    try {
+      await authService.updateUser(u.id, { isActive: next })
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: next } : x))
+    } catch (e) {
+      alert(e.response?.data?.message || 'Cập nhật trạng thái thất bại')
+    }
+  }
+
+  const openEdit = (u) => {
+    setEditId(u.id)
+    setEditForm({ hoTen: u.hoTen, role: u.role })
+    setEditError('')
+    setShowEdit(true)
+  }
+
+  const handleEdit = async () => {
+    if (!editForm.hoTen.trim()) { setEditError('Vui lòng nhập họ tên'); return }
+    setEditSaving(true)
+    setEditError('')
+    try {
+      const res = await authService.updateUser(editId, editForm)
+      setUsers(prev => prev.map(x => x.id === editId ? { ...x, ...res.data.data } : x))
+      setShowEdit(false)
+    } catch (e) {
+      setEditError(e.response?.data?.message || 'Cập nhật tài khoản thất bại')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -184,12 +224,14 @@ export default function NhanSu() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1">
                         <button
+                          onClick={() => openEdit(u)}
                           className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors"
                           title="Chỉnh sửa"
                         >
                           <Pencil size={13} />
                         </button>
                         <button
+                          onClick={() => handleToggleActive(u)}
                           className={`p-1.5 rounded hover:bg-secondary transition-colors ${u.isActive ? 'text-muted-foreground hover:text-destructive' : 'text-muted-foreground hover:text-green-600'}`}
                           title={u.isActive ? 'Khóa tài khoản' : 'Mở khóa'}
                         >
@@ -270,6 +312,37 @@ export default function NhanSu() {
         <div className="text-xs text-muted-foreground bg-secondary rounded-md px-3 py-2">
           <strong>Lưu ý:</strong> Tài khoản mới sẽ được kích hoạt ngay sau khi tạo.
         </div>
+      </Modal>
+
+      {/* Modal Chỉnh sửa tài khoản */}
+      <Modal
+        title="Chỉnh sửa tài khoản"
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        footer={
+          <>
+            <SecondaryBtn onClick={() => setShowEdit(false)}>Hủy</SecondaryBtn>
+            <PrimaryBtn onClick={handleEdit} disabled={editSaving}>
+              {editSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+            </PrimaryBtn>
+          </>
+        }
+      >
+        {editError && (
+          <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">{editError}</p>
+        )}
+        <FormInput
+          label="Họ và tên"
+          required
+          value={editForm.hoTen}
+          onChange={e => setEditForm(f => ({ ...f, hoTen: e.target.value }))}
+        />
+        <Select
+          label="Phân quyền"
+          value={editForm.role}
+          onChange={val => setEditForm(f => ({ ...f, role: val }))}
+          options={ROLE_OPTIONS}
+        />
       </Modal>
     </div>
   )

@@ -229,8 +229,8 @@ export default function HoSo() {
   /* ── Member CRUD (UC04) ── */
   const openAddMem = () => { setMemForm(EMPTY_MEM); setMemErr(''); setShowAddMem(true) }
   const handleAddMem = async () => {
-    if (!memForm.hoTen.trim())         { setMemErr('Vui lòng nhập họ tên'); return }
-    if (!memForm.quanHeChuHo.trim())   { setMemErr('Vui lòng nhập quan hệ chủ hộ'); return }
+    if (!memForm.hoTen.trim())                            { setMemErr('Vui lòng nhập họ tên'); return }
+    if (!memForm.laChuHo && !memForm.quanHeChuHo.trim())  { setMemErr('Vui lòng nhập quan hệ chủ hộ'); return }
     setMemSaving(true); setMemErr('')
     try {
       const payload = {
@@ -575,11 +575,18 @@ export default function HoSo() {
         <Select label="Giới tính" value={memForm.gioiTinh} onChange={v => setMemForm(f => ({ ...f, gioiTinh: v }))} options={gioiTinhOpts} />
         <FormInput label="CCCD" placeholder="012345678910" value={memForm.cccd} onChange={e => setMemForm(f => ({ ...f, cccd: e.target.value }))} />
         <FormInput label="Số điện thoại" placeholder="0901234567" value={memForm.sdt} onChange={e => setMemForm(f => ({ ...f, sdt: e.target.value }))} />
-        <FormInput label="Quan hệ với chủ hộ" required placeholder="Vợ, Con, Bố, Mẹ..." value={memForm.quanHeChuHo} onChange={e => setMemForm(f => ({ ...f, quanHeChuHo: e.target.value }))} />
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={memForm.laChuHo} onChange={e => setMemForm(f => ({ ...f, laChuHo: e.target.checked }))} className="rounded" />
           Là chủ hộ
         </label>
+        <FormInput
+          label="Quan hệ với chủ hộ"
+          required={!memForm.laChuHo}
+          disabled={memForm.laChuHo}
+          placeholder={memForm.laChuHo ? 'Chủ hộ' : 'Vợ, Con, Bố, Mẹ...'}
+          value={memForm.quanHeChuHo}
+          onChange={e => setMemForm(f => ({ ...f, quanHeChuHo: e.target.value }))}
+        />
       </Modal>
 
       {/* ══ Modal Biến động (UC08/09) ══ */}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Send, Plus, Eye, Trash2, CheckCircle2, XCircle,
   Search, RefreshCw, MessageSquare, Mail, Phone, X,
@@ -134,15 +135,20 @@ function ComposeModal({ open, onClose, onDone }) {
       }
       const hasMemberRecipients = form.memberIds.length > 0 || form.groupIds.length > 0
       // Gửi cho follower Zalo (kèm tiêu đề/nội dung/đính kèm) — gửi ngay
+      let followerWarning = ''
       if (form.followerIds.length > 0) {
-        await sendDirectMessage({ userIds: form.followerIds, notificationId: id }).catch(() => {})
+        try {
+          await sendDirectMessage({ userIds: form.followerIds, notificationId: id })
+        } catch (e) {
+          followerWarning = ` (Lưu ý: ${e.response?.data?.message || 'gửi tới follower Zalo thất bại'})`
+        }
       }
       if (scheduleMode && scheduledAt && hasMemberRecipients) {
         await scheduleNotification(id, scheduledAt)
-        showToast('success', 'Đã lưu và lên lịch gửi thành công!')
+        showToast('success', `Đã lưu và lên lịch gửi thành công!${followerWarning}`)
       } else {
         await sendNotification(id)
-        showToast('success', 'Đã gửi thông báo thành công!')
+        showToast('success', `Đã gửi thông báo thành công!${followerWarning}`)
       }
       setTimeout(() => { onDone(); onClose() }, 1200)
     } catch (err) {
@@ -155,7 +161,7 @@ function ComposeModal({ open, onClose, onDone }) {
   const totalAttach = imgPreviews.length + otherFiles.length
   const totalRecipients = form.groupIds.length + form.memberIds.length + form.followerIds.length
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col">
 
@@ -485,7 +491,8 @@ function ComposeModal({ open, onClose, onDone }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -524,7 +531,7 @@ function SendsModal({ notifId, title, open, onClose }) {
   const sent = sends.filter(s => ['SENT','READ','CONFIRMED'].includes(s.trangThai)).length
   const failed = sends.filter(s => s.trangThai === 'FAILED').length
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -595,7 +602,8 @@ function SendsModal({ notifId, title, open, onClose }) {
           <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Đóng</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

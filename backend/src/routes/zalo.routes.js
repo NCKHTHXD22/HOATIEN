@@ -18,6 +18,15 @@ router.post("/webhook", async (req, res) => {
     // Dùng sender.id (= user_id, KHỚP getfollowers/danh bạ), KHÔNG dùng user_id_by_app (id khác hệ → sinh follower trùng)
     const userId = sender?.id || req.body.user_id_by_app;
 
+    // Người mới follow OA → thêm ngay vào danh sách follower, không cần đợi đồng bộ thủ công
+    if (req.body.event_name === "follow") {
+      if (userId) {
+        ZaloEvent.create({ type: "WEBHOOK", zaloUserId: userId, payload: req.body }).catch(() => {});
+        ZaloService.handleFollow(userId).catch((e) => logger.error(`handleFollow: ${e.message}`));
+      }
+      return res.status(200).json({ error: 0 });
+    }
+
     if (!userId || !message?.text) {
       return res.status(200).json({ error: 0 });
     }

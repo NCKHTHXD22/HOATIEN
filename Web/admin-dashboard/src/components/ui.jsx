@@ -1,5 +1,6 @@
 // UI primitives — uses design-system tokens from tailwind.config.js
 import { X } from 'lucide-react'
+import { createPortal } from 'react-dom'
 
 export function Card({ children, className = '' }) {
   return (
@@ -185,7 +186,11 @@ export function ActionBtn({ icon: Icon, color = 'currentColor', onClick }) {
 
 export function Modal({ title, open, onClose, children, footer, wide }) {
   if (!open) return null
-  return (
+  // Render qua portal vào document.body: nếu không, "fixed" bên trong sẽ bị
+  // các ancestor có animation/transform (vd .animate-fade-in) biến thành
+  // containing block riêng, khiến modal bị kẹt/che trong khung trang thay vì
+  // phủ toàn viewport.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className={`relative bg-card border border-border rounded-xl shadow-2xl w-full mx-4 max-h-[90vh] flex flex-col ${wide ? 'max-w-2xl' : 'max-w-lg'}`}>
@@ -200,7 +205,8 @@ export function Modal({ title, open, onClose, children, footer, wide }) {
           <div className="px-6 py-4 border-t border-border flex justify-end gap-2 shrink-0">{footer}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

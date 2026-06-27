@@ -14,3 +14,6 @@ export const changePassword = (oldPassword, newPassword) =>
 
 export const updateNotifyPermission = (userId, canSendNotification) =>
   api.put(`/auth/users/${userId}/notify-permission`, { canSendNotification })
+
+export const updateUser = (userId, data) =>
+  api.put(`/auth/users/${userId}`, data)

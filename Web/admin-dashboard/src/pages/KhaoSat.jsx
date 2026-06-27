@@ -1,13 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
-  ClipboardList, Plus, Trash2, RefreshCw, X,
+  ClipboardList, Plus, Trash2, RefreshCw, X, Lock,
   PlusCircle, MinusCircle, BarChart3,
 } from 'lucide-react'
-import { getSurveys, createSurvey, deleteSurvey, getSurveyResults } from '../services/notificationService'
+import { getSurveys, createSurvey, deleteSurvey, closeSurvey, getSurveyResults } from '../services/notificationService'
 
 function fmtDate(d) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('vi-VN')
+}
+
+function getSurveyStatus(s) {
+  if (!s.isActive) return { label: 'Đã đóng', color: 'bg-gray-100 text-gray-500' }
+  if (s.deadline && new Date(s.deadline) < new Date()) return { label: 'Đã hết hạn', color: 'bg-red-100 text-red-600' }
+  return { label: 'Đang mở', color: 'bg-green-100 text-green-700' }
 }
 
 const QTYPE_LABEL = { SINGLE: 'Một lựa chọn', MULTIPLE: 'Nhiều lựa chọn', TEXT: 'Văn bản tự do' }
@@ -70,7 +77,7 @@ function CreateSurveyModal({ open, onClose, onDone }) {
   }
 
   if (!open) return null
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -167,7 +174,8 @@ function CreateSurveyModal({ open, onClose, onDone }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -183,7 +191,7 @@ function ResultsModal({ surveyId, open, onClose }) {
   }, [open, surveyId])
 
   if (!open) return null
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -240,7 +248,8 @@ function ResultsModal({ surveyId, open, onClose }) {
           <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Đóng</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -261,6 +270,12 @@ export default function KhaoSat() {
   const handleDelete = async (id) => {
     if (!confirm('Xóa khảo sát này?')) return
     await deleteSurvey(id).catch(e => alert(e.response?.data?.message || 'Không thể xóa'))
+    load()
+  }
+
+  const handleClose = async (id) => {
+    if (!confirm('Đóng khảo sát này? Người dân sẽ không thể trả lời thêm.')) return
+    await closeSurvey(id).catch(e => alert(e.response?.data?.message || 'Không thể đóng khảo sát'))
     load()
   }
 
@@ -292,7 +307,9 @@ export default function KhaoSat() {
                 </button>
               </div>
             )
-            : surveys.map(s => (
+            : surveys.map(s => {
+              const status = getSurveyStatus(s)
+              return (
               <div key={s.id} className="bg-white rounded-xl border p-5 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -306,8 +323,8 @@ export default function KhaoSat() {
                       </p>
                     )}
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {s.isActive ? 'Đang mở' : 'Đã đóng'}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.color}`}>
+                    {status.label}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-4 pt-3 border-t">
@@ -317,15 +334,25 @@ export default function KhaoSat() {
                   >
                     <BarChart3 size={13} /> Xem kết quả
                   </button>
+                  {s.isActive && (
+                    <button
+                      onClick={() => handleClose(s.id)}
+                      title="Đóng khảo sát"
+                      className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 hover:text-amber-600"
+                    >
+                      <Lock size={14} />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(s.id)}
+                    title="Xóa khảo sát"
                     className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
                   >
                     <Trash2 size={14} />
                   </button>
                 </div>
               </div>
-            ))
+            )})
         }
       </div>
 

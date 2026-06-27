@@ -87,3 +87,6 @@ export const getSurveyResults = (id) =>
 
 export const deleteSurvey = (id) =>
   api.delete(`/notify/surveys/${id}`).then(r => r.data)
+
+export const closeSurvey = (id) =>
+  api.put(`/notify/surveys/${id}/close`).then(r => r.data)

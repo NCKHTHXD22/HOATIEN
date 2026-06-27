@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Users, Plus, Trash2, RefreshCw, Search, X, ChevronRight,
   UserPlus,
@@ -45,7 +46,7 @@ function CreateGroupModal({ open, onClose, onDone }) {
   }
 
   if (!open) return null
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -131,7 +132,8 @@ function CreateGroupModal({ open, onClose, onDone }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

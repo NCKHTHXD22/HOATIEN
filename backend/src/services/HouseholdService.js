@@ -57,6 +57,14 @@ async function update(id, newData, performedBy) {
 async function remove(id, performedBy) {
   const old = await HouseholdRepo.findById(id);
   if (!old) throw new Error("Không tìm thấy hộ dân");
+
+  const activeMembers = (old.members || []).filter((m) => m.trangThai === "ACTIVE");
+  if (activeMembers.length > 0) {
+    throw new Error(
+      `Muốn xóa hộ "${old.soHoKhau}" thì dân không còn ở hộ đó nữa (còn ${activeMembers.length} nhân khẩu).`
+    );
+  }
+
   await HouseholdRepo.remove(id);
   AuditService.log({ entityType: "household", entityId: id, action: "DELETE", oldData: old, performedBy });
   ReportCacheRepo.invalidateAll().catch(() => {});

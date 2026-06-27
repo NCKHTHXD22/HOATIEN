@@ -16,6 +16,10 @@ function normalizeMember(data = {}) {
     }
   }
 
+  if (out.laChuHo && !String(out.quanHeChuHo || "").trim()) {
+    out.quanHeChuHo = "Chủ hộ";
+  }
+
   return out;
 }
 

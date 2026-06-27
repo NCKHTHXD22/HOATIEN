@@ -283,6 +283,13 @@ async function _getFollowerProfile(userId) {
   };
 }
 
+// Gọi khi Zalo webhook báo có người mới follow OA — thêm ngay vào danh sách
+// follower (Mongo) để admin thấy không cần đợi đồng bộ thủ công.
+async function handleFollow(userId) {
+  const profile = await _getFollowerProfile(userId);
+  await ZaloFollowerRepo.upsertMany([profile]);
+}
+
 let _syncing = false;
 
 async function _runSyncFollowers() {
@@ -326,4 +333,4 @@ async function sendToFollowers(userIds, text, attachments = []) {
   return results;
 }
 
-module.exports = { handleMessage, sendMessage, startSyncFollowers, isSyncing, sendToFollowers };
+module.exports = { handleMessage, handleFollow, sendMessage, startSyncFollowers, isSyncing, sendToFollowers };

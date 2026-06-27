@@ -322,7 +322,7 @@ model SurveyResponse {
   memberId  String?
   answers   Json
   createdAt DateTime @default(now())
-  survey    Survey   @relation(fields: [surveyId], references: [id])
+  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
   @@map("survey_responses")
 }

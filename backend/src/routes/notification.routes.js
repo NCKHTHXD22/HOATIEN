@@ -413,4 +413,12 @@ router.delete("/surveys/:id", authenticate, requireRole("SUPER_ADMIN", "ADMIN_VI
   } catch (err) { next(err); }
 });
 
+// PUT /api/notify/surveys/:id/close — đóng khảo sát thủ công
+router.put("/surveys/:id/close", authenticate, requireRole(...SENDER_ROLES), async (req, res, next) => {
+  try {
+    const survey = await SurveyRepo.close(req.params.id);
+    ok(res, survey, "Đã đóng khảo sát");
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

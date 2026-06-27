@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, RefreshCw, Send, Link as LinkIcon, Unlink, UserCheck, X } from 'lucide-react'
 import { syncFollowers, getFollowers, sendDirectMessage, searchMembers, linkFollower } from '../services/zaloService'
 
 export default function ZaloFollowersModal({ open, onClose }) {
-  if (!open) return null;
   const [followers, setFollowers] = useState([])
   const [total, setTotal] = useState(0)
   const [syncing, setSyncing] = useState(false)
@@ -27,7 +27,7 @@ export default function ZaloFollowersModal({ open, onClose }) {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (open) load() }, [open, load])
 
   const handleSync = async () => {
     try {
@@ -83,12 +83,14 @@ export default function ZaloFollowersModal({ open, onClose }) {
   const toggleSelect = (id) => setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
   const toggleAll = () => setSelectedIds(p => p.length === filtered.length ? [] : filtered.map(f => f.userId))
 
-  const filtered = followers.filter(f => 
-    (f.displayName || '').toLowerCase().includes(search.toLowerCase()) || 
+  const filtered = followers.filter(f =>
+    (f.displayName || '').toLowerCase().includes(search.toLowerCase()) ||
     (f.userId || '').includes(search)
   )
 
-  return (
+  if (!open) return null
+
+  return createPortal(
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col">
         {/* Header */}
@@ -280,6 +282,7 @@ export default function ZaloFollowersModal({ open, onClose }) {
         </div>
       )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

@@ -54,6 +54,31 @@ router.get("/users", authenticate, requireRole("SUPER_ADMIN"), async (req, res, 
   } catch (err) { next(err); }
 });
 
+// PUT /api/auth/users/:id  (chỉ SUPER_ADMIN) — sửa hoTen, role, isActive, villages
+router.put(
+  "/users/:id",
+  authenticate,
+  requireRole("SUPER_ADMIN"),
+  [
+    body("hoTen").optional().notEmpty(),
+    body("role").optional().isIn(["SUPER_ADMIN", "ADMIN_VILLAGE", "VIEWER"]),
+    body("isActive").optional().isBoolean(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { hoTen, role, isActive, villageIds } = req.body;
+      const data = {};
+      if (hoTen !== undefined) data.hoTen = hoTen;
+      if (role !== undefined) data.role = role;
+      if (isActive !== undefined) data.isActive = isActive;
+      const updated = await AdminUserRepo.update(req.params.id, data, villageIds);
+      const { passwordHash: _, ...safeUser } = updated;
+      ok(res, safeUser, "Cập nhật tài khoản thành công");
+    } catch (err) { next(err); }
+  }
+);
+
 // PUT /api/auth/users/:id/notify-permission  (chỉ SUPER_ADMIN)
 router.put(
   "/users/:id/notify-permission",

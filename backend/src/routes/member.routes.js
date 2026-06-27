@@ -49,7 +49,12 @@ router.post(
   [
     body("hoTen").notEmpty(),
     body("gioiTinh").isIn(["NAM", "NU", "KHAC"]),
-    body("quanHeChuHo").notEmpty(),
+    body("quanHeChuHo").custom((value, { req }) => {
+      if (!req.body.laChuHo && !String(value || "").trim()) {
+        throw new Error("quanHeChuHo là bắt buộc");
+      }
+      return true;
+    }),
     body("householdId").notEmpty(),
   ],
   validate,

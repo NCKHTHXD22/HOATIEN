@@ -17,7 +17,7 @@ const TAB_FILTER = {
   'Chuyển đi':    { loai: 'MOVE_OUT' },
 }
 const COLUMNS  = ['Hộ khẩu', 'Thôn', 'Loại', 'Ngày', 'Nguồn gốc / Nơi đến', 'Ghi chú', 'Người thực hiện', '']
-const EMPTY    = { householdId: '', loai: 'MOVE_IN', ngay: new Date().toISOString().slice(0, 10), nguonGoc: '', noiDen: '', ghiChu: '' }
+const EMPTY    = { villageId: '', householdId: '', loai: 'MOVE_IN', ngay: new Date().toISOString().slice(0, 10), nguonGoc: '', noiDen: '', ghiChu: '' }
 
 export default function BienDong() {
   const [tab, setTab]               = useState('Tất cả')
@@ -79,6 +79,7 @@ export default function BienDong() {
   /* ── Add ── */
   const openAdd = () => { setAddForm(EMPTY); setAddErr(''); setShowAdd(true) }
   const handleAdd = async () => {
+    if (!addForm.villageId)   { setAddErr('Vui lòng chọn thôn'); return }
     if (!addForm.householdId) { setAddErr('Vui lòng chọn hộ dân'); return }
     if (!addForm.ngay)        { setAddErr('Vui lòng chọn ngày'); return }
     setAddSaving(true); setAddErr('')
@@ -115,8 +116,12 @@ export default function BienDong() {
     catch (e) { alert(e.response?.data?.message || 'Xóa thất bại') }
   }
 
-  const villageOpts   = [{ value: '', label: 'Tất cả thôn' }, ...villages.map(v => ({ value: v.id, label: v.ten }))]
-  const householdOpts = [{ value: '', label: '-- Chọn hộ dân --' }, ...households.map(h => ({ value: h.id, label: `${h.soHoKhau} — ${h.diaChi}` }))]
+  const villageOpts    = [{ value: '', label: 'Tất cả thôn' }, ...villages.map(v => ({ value: v.id, label: v.ten }))]
+  const villageOptsReq = [{ value: '', label: '-- Chọn thôn --' }, ...villages.map(v => ({ value: v.id, label: v.ten }))]
+  const householdOpts  = [{ value: '', label: '-- Chọn hộ dân --' },
+    ...households.filter(h => !addForm.villageId || h.village?.id === addForm.villageId)
+      .map(h => ({ value: h.id, label: `${h.soHoKhau} — ${h.diaChi}` }))]
+  const allHouseholdOpts = [{ value: '', label: '-- Chọn hộ dân --' }, ...households.map(h => ({ value: h.id, label: `${h.soHoKhau} — ${h.diaChi}` }))]
   const loaiOpts      = [{ value: 'MOVE_IN', label: 'Chuyển đến (Move In)' }, { value: 'MOVE_OUT', label: 'Chuyển đi (Move Out)' }]
 
   const statCards = [
@@ -203,6 +208,7 @@ export default function BienDong() {
       <Modal title="Ghi nhận biến động dân cư" open={showAdd} onClose={() => setShowAdd(false)}
         footer={<><SecondaryBtn onClick={() => setShowAdd(false)}>Hủy</SecondaryBtn><PrimaryBtn onClick={handleAdd} disabled={addSaving}>{addSaving ? 'Đang lưu...' : 'Ghi nhận'}</PrimaryBtn></>}>
         {addErr && <ErrBox msg={addErr} />}
+        <Select label="Thôn" required value={addForm.villageId} onChange={v => setAddForm(f => ({ ...f, villageId: v, householdId: '' }))} options={villageOptsReq} />
         <Select label="Hộ dân" required value={addForm.householdId} onChange={v => setAddForm(f => ({ ...f, householdId: v }))} options={householdOpts} />
         <Select label="Loại biến động" value={addForm.loai} onChange={v => setAddForm(f => ({ ...f, loai: v }))} options={loaiOpts} />
         <FormInput label="Ngày" type="date" required value={addForm.ngay} onChange={e => setAddForm(f => ({ ...f, ngay: e.target.value }))} />
@@ -216,7 +222,7 @@ export default function BienDong() {
         footer={<><SecondaryBtn onClick={() => setShowEdit(false)}>Hủy</SecondaryBtn><PrimaryBtn onClick={handleEdit} disabled={editSaving}>{editSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</PrimaryBtn></>}>
         {editErr && <ErrBox msg={editErr} />}
         <p className="text-xs text-muted-foreground">
-          Hộ dân: <span className="font-semibold text-foreground">{householdOpts.find(o => o.value === editForm.householdId)?.label ?? '—'}</span>
+          Hộ dân: <span className="font-semibold text-foreground">{allHouseholdOpts.find(o => o.value === editForm.householdId)?.label ?? '—'}</span>
         </p>
         <Select label="Loại biến động" value={editForm.loai} onChange={v => setEditForm(f => ({ ...f, loai: v }))} options={loaiOpts} />
         <FormInput label="Ngày" type="date" required value={editForm.ngay} onChange={e => setEditForm(f => ({ ...f, ngay: e.target.value }))} />

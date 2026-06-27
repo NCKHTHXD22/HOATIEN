@@ -6,7 +6,6 @@ import Dashboard from './pages/Dashboard'
 import HoSo from './pages/HoSo'
 import TinTuc from './pages/TinTuc'
 import VanBan from './pages/VanBan'
-import PhanAnh from './pages/PhanAnh'
 import NhanSu from './pages/NhanSu'
 import BaoCao from './pages/BaoCao'
 import CaiDat from './pages/CaiDat'
@@ -41,7 +40,6 @@ function AppRoutes() {
         <Route path="bien-dong" element={<BienDong />} />
         <Route path="tin-tuc"  element={<TinTuc />} />
         <Route path="van-ban"  element={<VanBan />} />
-        <Route path="phan-anh" element={<PhanAnh />} />
         <Route path="nhan-su"  element={<NhanSu />} />
         <Route path="bao-cao"  element={<BaoCao />} />
         <Route path="cai-dat"  element={<CaiDat />} />

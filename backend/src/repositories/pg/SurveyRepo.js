@@ -39,6 +39,9 @@ const create = async ({ tieuDe, notificationId, deadline, questions }) => {
 const remove = (id) =>
   prisma.survey.delete({ where: { id } });
 
+const close = (id) =>
+  prisma.survey.update({ where: { id }, data: { isActive: false } });
+
 const addResponse = (data) =>
   prisma.surveyResponse.create({ data });
 
@@ -67,4 +70,4 @@ const getResults = async (surveyId) => {
   return { survey, totalResponses: responses.length, summary };
 };
 
-module.exports = { findAll, findById, create, remove, addResponse, getResponses, getResults };
+module.exports = { findAll, findById, create, remove, close, addResponse, getResponses, getResults };
