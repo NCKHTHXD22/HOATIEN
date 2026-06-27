@@ -58,14 +58,28 @@ async function remove(id, performedBy) {
   const old = await HouseholdRepo.findById(id);
   if (!old) throw new Error("Không tìm thấy hộ dân");
 
-  const remainingMembers = old.members || [];
-  if (remainingMembers.length > 0) {
+  // Chỉ nhân khẩu CHƯA chuyển đi (ACTIVE) mới chặn xóa hộ. Nhân khẩu đã
+  // chuyển đi/đã mất (DA_CHUYEN_DI/DA_MAN) chỉ còn là bản ghi lịch sử —
+  // xóa kèm hộ luôn để không vướng khóa ngoại (members_householdId_fkey).
+  const activeMembers = (old.members || []).filter((m) => m.trangThai === "ACTIVE");
+  if (activeMembers.length > 0) {
     throw new Error(
-      `Muốn xóa hộ "${old.soHoKhau}" thì dân không còn ở hộ đó nữa (còn ${remainingMembers.length} nhân khẩu, kể cả nhân khẩu đã chuyển đi/đã mất — vui lòng chuyển hoặc xóa hết trước).`
+      `Không thể xóa hộ "${old.soHoKhau}" vì còn ${activeMembers.length} nhân khẩu chưa chuyển đi. Vui lòng chuyển hộ/cập nhật trạng thái cho hết nhân khẩu trước khi xóa.`
     );
   }
 
-  await HouseholdRepo.remove(id);
+  const leftoverMemberIds = old.members.map((m) => m.id);
+
+  await prisma.$transaction(async (tx) => {
+    if (leftoverMemberIds.length > 0) {
+      // notification_sends.memberId là RESTRICT nên phải xóa trước Member
+      await tx.notificationSend.deleteMany({ where: { memberId: { in: leftoverMemberIds } } });
+      await tx.member.deleteMany({ where: { id: { in: leftoverMemberIds } } });
+    }
+    await tx.movementRecord.deleteMany({ where: { householdId: id } });
+    await tx.household.delete({ where: { id } });
+  });
+
   AuditService.log({ entityType: "household", entityId: id, action: "DELETE", oldData: old, performedBy });
   ReportCacheRepo.invalidateAll().catch(() => {});
 }
