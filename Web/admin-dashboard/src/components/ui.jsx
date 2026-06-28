@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 
 export function Card({ children, className = '' }) {
   return (
-    <div className={`bg-card text-card-foreground rounded-lg p-5 border border-border shadow-sm ${className}`}>
+    <div className={`bg-card text-card-foreground rounded-xl p-5 border border-border shadow-sm ${className}`}>
       {children}
     </div>
   )
@@ -14,8 +14,8 @@ export function PageHeader({ title, subtitle, action }) {
   return (
     <div className="flex items-start justify-between mb-6">
       <div>
-        <h1 className="text-xl font-extrabold text-foreground">{title}</h1>
-        {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
+        <h1 className="text-[1.7rem] font-extrabold text-foreground tracking-tight">{title}</h1>
+        {subtitle && <p className="text-sm text-muted-foreground mt-1.5">{subtitle}</p>}
       </div>
       {action && <div>{action}</div>}
     </div>
@@ -63,26 +63,28 @@ export function Badge({ children, variant = 'default' }) {
   )
 }
 
-/* StatCard — large radial icon, coloured number */
+/* StatCard — gradient icon badge, coloured number — đồng bộ phong cách KPI card của Dashboard */
 export function StatCard({ label, value, sub, icon: Icon, iconColor }) {
   return (
-    <div className="bg-card text-card-foreground rounded-lg p-5 border border-border shadow-sm card-hover">
-      <div className="flex items-center justify-between gap-3">
+    <div className="bg-card text-card-foreground rounded-xl p-5 border border-border shadow-sm card-hover">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[.1em] text-muted-foreground">{label}</p>
-          <p className="text-4xl font-black mt-2 leading-none" style={{ color: iconColor }}>
+          <p className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">{label}</p>
+          <p className="text-[2.2rem] font-black mt-2 leading-none" style={{ color: iconColor }}>
             {value}
           </p>
-          {sub && <p className="text-xs text-muted-foreground mt-2">{sub}</p>}
+          {sub && <p className="text-xs text-muted-foreground mt-2.5">{sub}</p>}
         </div>
         {Icon && (
           <div
-            className="shrink-0 w-16 h-16 rounded-full flex items-center justify-center"
+            className="shrink-0 rounded-2xl flex items-center justify-center"
             style={{
-              background: `radial-gradient(circle at 38% 38%,${iconColor}44 0%,${iconColor}18 55%,${iconColor}06 100%)`,
+              width: 52, height: 52,
+              background: `linear-gradient(135deg,${iconColor}26,${iconColor}12)`,
+              boxShadow: `inset 0 0 0 1px ${iconColor}22`,
             }}
           >
-            <Icon size={26} style={{ color: iconColor }} />
+            <Icon size={24} style={{ color: iconColor }} />
           </div>
         )}
       </div>

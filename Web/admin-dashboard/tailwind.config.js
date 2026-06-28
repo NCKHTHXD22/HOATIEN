@@ -68,7 +68,7 @@ export default {
         'pulse-soft':     'pulse-soft 2s ease-in-out infinite',
       },
       backgroundImage: {
-        'sidebar':   'linear-gradient(180deg, #0d1b2a 0%, #0f2336 60%, #112840 100%)',
+        'sidebar':   'linear-gradient(175deg, #1e3a8a 0%, #1d4ed8 55%, #2563eb 100%)',
         'header':    'linear-gradient(135deg, #1d4ed8 0%, #2563eb 40%, #0ea5e9 100%)',
         'hero-card': 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #0ea5e9 100%)',
       },
