@@ -6,19 +6,13 @@ import {
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { StatCard } from '../components/ui'
-import { useAuth } from '../context/AuthContext'
 import * as reportService from '../services/reportService'
 
 export default function Dashboard() {
-  const { user } = useAuth()
   const [summary, setSummary] = useState(null)
   const [movStats, setMovStats] = useState(null)
   const [villageStats, setVillageStats] = useState([])
   const [loading, setLoading] = useState(true)
-
-  const now = new Date()
-  const hour = now.getHours()
-  const greeting = hour < 12 ? 'buổi sáng' : hour < 18 ? 'buổi chiều' : 'buổi tối'
 
   const load = async () => {
     setLoading(true)
@@ -61,10 +55,10 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-foreground">
-            Chào {greeting}, {user?.hoTen || 'Admin'}!
+            Tổng quan hệ thống quản lý dân số
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Tổng quan hệ thống quản lý dân số — UBND Xã Hòa Tiến
+            UBND Xã Hòa Tiến
           </p>
         </div>
         <button

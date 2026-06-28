@@ -85,7 +85,7 @@ export default function Sidebar({ open }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white truncate">Quản trị viên</p>
-          <p className="text-[11px] text-white/40 truncate">Lãnh đạo Ủy ban</p>
+          <p className="text-[11px] text-white/40 truncate">Admin</p>
         </div>
         <button className="p-1.5 rounded-md text-white/30 hover:text-white/70 hover:bg-white/[.07] transition-colors shrink-0">
           <LogOut size={15} />
