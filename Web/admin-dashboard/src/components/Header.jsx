@@ -1,4 +1,4 @@
-import { Bell, Menu, Search, ChevronDown, LogOut, Check } from 'lucide-react'
+import { Bell, Menu, Search, ChevronDown, LogOut, Check, Loader2 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -57,12 +57,6 @@ export default function Header({ onMenuClick }) {
   const handleAlertClick = (alert) => {
     if (!alert.read) {
       markReadMutation.mutate(alert._id)
-    }
-    setBellOpen(false)
-    if (alert.refId) {
-      navigate(`/phan-anh/${alert.refId}`)
-    } else {
-      navigate('/phan-anh')
     }
   }
 

@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen,
   Users, BarChart3, Settings, LogOut, MapPin,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import hoaTienLogo from '../assets/hoa-tien-logo.jpg'
+import { useAuth } from '../context/AuthContext'
 
 const navGroups = [
   {
@@ -43,6 +44,14 @@ const navGroups = [
 ]
 
 export default function Sidebar({ open }) {
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <aside
       className={clsx(
@@ -87,7 +96,11 @@ export default function Sidebar({ open }) {
           <p className="text-sm font-semibold text-white truncate">Quản trị viên</p>
           <p className="text-[11px] text-white/40 truncate">Admin</p>
         </div>
-        <button className="p-1.5 rounded-md text-white/30 hover:text-white/70 hover:bg-white/[.07] transition-colors shrink-0">
+        <button
+          onClick={handleLogout}
+          title="Đăng xuất"
+          className="p-1.5 rounded-md text-white/30 hover:text-white/70 hover:bg-white/[.07] transition-colors shrink-0"
+        >
           <LogOut size={15} />
         </button>
       </div>
