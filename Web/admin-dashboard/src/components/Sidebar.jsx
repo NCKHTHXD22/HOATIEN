@@ -66,7 +66,7 @@ export default function Sidebar({ open }) {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-bold text-white truncate leading-tight">UBND Xã Hòa Tiến</p>
-          <p className="text-[11px] text-white/40 truncate">Cổng quản lý nội bộ</p>
+          <p className="text-[11px] text-white/60 truncate">Cổng quản lý nội bộ</p>
         </div>
       </div>
 
@@ -74,7 +74,7 @@ export default function Sidebar({ open }) {
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-4">
         {navGroups.map(group => (
           <div key={group.label}>
-            <p className="text-[10px] font-bold uppercase tracking-[.14em] px-2 mb-1.5 text-white/25">
+            <p className="text-[10px] font-bold uppercase tracking-[.14em] px-2 mb-1.5 text-white/45">
               {group.label}
             </p>
             <div className="space-y-0.5">
@@ -94,12 +94,12 @@ export default function Sidebar({ open }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white truncate">Quản trị viên</p>
-          <p className="text-[11px] text-white/40 truncate">Admin</p>
+          <p className="text-[11px] text-white/60 truncate">Admin</p>
         </div>
         <button
           onClick={handleLogout}
           title="Đăng xuất"
-          className="p-1.5 rounded-md text-white/30 hover:text-white/70 hover:bg-white/[.07] transition-colors shrink-0"
+          className="p-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/[.1] transition-colors shrink-0"
         >
           <LogOut size={15} />
         </button>
@@ -116,7 +116,7 @@ function NavItem({ to, icon: Icon, label }) {
         'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200',
         isActive
           ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30'
-          : 'text-white/50 hover:bg-white/[.06] hover:text-white/85'
+          : 'text-white/75 hover:bg-white/[.08] hover:text-white'
       )}
     >
       <Icon size={16} className="shrink-0" />
