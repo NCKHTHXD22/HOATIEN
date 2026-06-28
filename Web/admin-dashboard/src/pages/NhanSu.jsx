@@ -258,14 +258,14 @@ export default function NhanSu() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => openEdit(u)}
-                          className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-md hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200 cursor-pointer"
                           title="Chỉnh sửa"
                         >
                           <Pencil size={13} />
                         </button>
                         <button
                           onClick={() => handleToggleActive(u)}
-                          className={`p-1.5 rounded hover:bg-secondary transition-colors cursor-pointer ${u.isActive ? 'text-muted-foreground hover:text-destructive' : 'text-muted-foreground hover:text-green-600'}`}
+                          className={`p-1.5 rounded-md hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200 cursor-pointer ${u.isActive ? 'text-muted-foreground hover:text-destructive hover:bg-destructive/10' : 'text-muted-foreground hover:text-green-600 hover:bg-green-600/10'}`}
                           title={u.isActive ? 'Khóa tài khoản' : 'Mở khóa'}
                         >
                           {u.isActive ? <Lock size={13} /> : <Unlock size={13} />}

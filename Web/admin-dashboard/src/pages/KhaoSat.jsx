@@ -410,13 +410,13 @@ export default function KhaoSat() {
                 <div className="flex items-center gap-2 mt-4 pt-3 border-t">
                   <button
                     onClick={() => setResultsModal(s.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                   >
                     <BarChart3 size={13} /> Kết quả
                   </button>
                   <button
                     onClick={() => setSendModal(s)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-green-600 bg-green-50 rounded-lg hover:bg-green-100"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-green-600 bg-green-50 rounded-lg hover:bg-green-100 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                   >
                     <Send size={13} /> Gửi Zalo
                   </button>
@@ -424,7 +424,7 @@ export default function KhaoSat() {
                     <button
                       onClick={() => handleClose(s.id)}
                       title="Đóng khảo sát"
-                      className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 hover:text-amber-600"
+                      className="p-1.5 rounded-lg text-amber-500 bg-amber-50 hover:bg-amber-100 hover:text-amber-600 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                     >
                       <Lock size={14} />
                     </button>
@@ -432,7 +432,7 @@ export default function KhaoSat() {
                   <button
                     onClick={() => handleDelete(s.id)}
                     title="Xóa khảo sát"
-                    className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
+                    className="p-1.5 rounded-lg text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                   >
                     <Trash2 size={14} />
                   </button>

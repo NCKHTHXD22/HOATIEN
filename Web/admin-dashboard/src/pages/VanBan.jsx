@@ -149,14 +149,14 @@ export default function VanBan() {
                 <td className="px-5 py-3"><Badge variant={tt.variant}>{tt.label}</Badge></td>
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-1">
-                    <button className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-primary transition-colors" title="Xem">
+                    <button className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" title="Xem">
                       <Eye size={13} />
                     </button>
-                    <button className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors" title="Sửa">
+                    <button className="p-1.5 rounded-md hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" title="Sửa">
                       <Pencil size={13} />
                     </button>
                     <button
-                      className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors"
+                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                       title="Xóa"
                       onClick={() => handleDelete(vb.id)}
                     >

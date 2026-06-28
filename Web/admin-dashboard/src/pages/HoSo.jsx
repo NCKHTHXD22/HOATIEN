@@ -5,7 +5,7 @@ import {
   Eye, Pencil, Trash2, ArrowDownToLine, ArrowUpFromLine, History, Scissors, GitMerge,
 } from 'lucide-react'
 import {
-  PageHeader, PrimaryBtn, SecondaryBtn, DataTable, Tabs,
+  PageHeader, PrimaryBtn, SecondaryBtn, AccentBtn, DataTable, Tabs,
   SearchInput, StatCard, Badge, Modal, Select, FormInput,
 } from '../components/ui'
 import * as householdService from '../services/householdService'
@@ -367,7 +367,7 @@ export default function HoSo() {
         action={
           <div className="flex items-center gap-2">
             <SecondaryBtn><Filter size={14} /> Lọc</SecondaryBtn>
-            <SecondaryBtn onClick={openMerge}><GitMerge size={14} /> Gộp hộ</SecondaryBtn>
+            <AccentBtn onClick={openMerge}><GitMerge size={14} /> Gộp hộ</AccentBtn>
             <PrimaryBtn onClick={openAdd}><Plus size={14} /> Thêm hộ dân</PrimaryBtn>
           </div>
         }
@@ -413,9 +413,9 @@ export default function HoSo() {
                 <td className="px-5 py-3"><Badge variant={tt.variant}>{tt.label}</Badge></td>
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-1">
-                    <button onClick={() => openDetail(h)} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-primary transition-colors" title="Xem chi tiết"><Eye size={13} /></button>
-                    <button onClick={() => openEdit(h)}   className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors" title="Chỉnh sửa"><Pencil size={13} /></button>
-                    <button onClick={() => handleDelete(h)} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors" title="Xóa"><Trash2 size={13} /></button>
+                    <button onClick={() => openDetail(h)} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" title="Xem chi tiết"><Eye size={13} /></button>
+                    <button onClick={() => openEdit(h)}   className="p-1.5 rounded-md hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" title="Chỉnh sửa"><Pencil size={13} /></button>
+                    <button onClick={() => handleDelete(h)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" title="Xóa"><Trash2 size={13} /></button>
                   </div>
                 </td>
               </tr>
@@ -615,7 +615,7 @@ export default function HoSo() {
 
       {/* ══ Modal Tách hộ (UC05) ══ */}
       <Modal title={`Tách hộ — ${detailHH?.soHoKhau ?? ''}`} open={showSplit} onClose={() => setShowSplit(false)}
-        footer={<><SecondaryBtn onClick={() => setShowSplit(false)}>Hủy</SecondaryBtn><PrimaryBtn onClick={handleSplit} disabled={splitSaving}>{splitSaving ? 'Đang xử lý...' : 'Xác nhận tách hộ'}</PrimaryBtn></>}>
+        footer={<><SecondaryBtn onClick={() => setShowSplit(false)}>Hủy</SecondaryBtn><AccentBtn onClick={handleSplit} disabled={splitSaving}>{splitSaving ? 'Đang xử lý...' : 'Xác nhận tách hộ'}</AccentBtn></>}>
         {splitErr && <ErrBox msg={splitErr} />}
         <p className="text-xs text-muted-foreground">Chọn các thành viên sẽ chuyển sang hộ mới:</p>
         {(detailHH?.members?.length ?? 0) === 0 ? (
@@ -645,9 +645,9 @@ export default function HoSo() {
             </p>
             <div className="flex gap-2">
               <SecondaryBtn onClick={() => setShowMerge(false)}>Hủy</SecondaryBtn>
-              <PrimaryBtn onClick={handleMerge} disabled={mergeSaving}>
+              <AccentBtn onClick={handleMerge} disabled={mergeSaving}>
                 {mergeSaving ? 'Đang gộp...' : <><GitMerge size={14} /> Xác nhận gộp hộ</>}
-              </PrimaryBtn>
+              </AccentBtn>
             </div>
           </div>
         }>

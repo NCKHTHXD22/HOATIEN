@@ -128,21 +128,21 @@ export default function TinTuc() {
               <td className="px-5 py-3">
                 <div className="flex items-center gap-1">
                   <button
-                    className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-primary transition-colors"
+                    className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                     title="Xem chi tiết"
                     onClick={() => { setDetailItem(b); setShowDetail(true) }}
                   >
                     <Eye size={13} />
                   </button>
                   <button
-                    className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-green-600 transition-colors"
+                    className="p-1.5 rounded-md hover:bg-green-600/10 text-muted-foreground hover:text-green-600 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                     title={b.trangThai === 'Đã đăng' ? 'Chuyển về nháp' : 'Đăng bài'}
                     onClick={() => togglePublish(b.id)}
                   >
                     <Pencil size={13} />
                   </button>
                   <button
-                    className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors"
+                    className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                     title="Xóa"
                     onClick={() => handleDelete(b.id)}
                   >

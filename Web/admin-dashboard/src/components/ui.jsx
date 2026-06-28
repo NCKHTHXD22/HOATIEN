@@ -22,24 +22,56 @@ export function PageHeader({ title, subtitle, action }) {
   )
 }
 
-export function PrimaryBtn({ children, onClick, disabled }) {
+/* Hệ màu gradient riêng cho từng loại hành động — mỗi variant một "đặc trưng" màu sắc */
+const BTN_GRADIENTS = {
+  primary: { bg: 'linear-gradient(135deg,#2563eb,#0ea5e9)', shadow: 'shadow-blue-500/30 hover:shadow-blue-500/40' },
+  danger:  { bg: 'linear-gradient(135deg,#dc2626,#e11d48)', shadow: 'shadow-red-500/30 hover:shadow-red-500/40' },
+  warning: { bg: 'linear-gradient(135deg,#d97706,#facc15)', shadow: 'shadow-amber-500/30 hover:shadow-amber-500/40' },
+  accent:  { bg: 'linear-gradient(135deg,#ea580c,#fb923c)', shadow: 'shadow-orange-500/30 hover:shadow-orange-500/40' },
+  success: { bg: 'linear-gradient(135deg,#16a34a,#10b981)', shadow: 'shadow-emerald-500/30 hover:shadow-emerald-500/40' },
+  purple:  { bg: 'linear-gradient(135deg,#7c3aed,#d946ef)', shadow: 'shadow-violet-500/30 hover:shadow-violet-500/40' },
+}
+
+function GradientBtn({ variant = 'primary', children, onClick, disabled, type }) {
+  const g = BTN_GRADIENTS[variant] || BTN_GRADIENTS.primary
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm shadow-primary/25"
+      style={{ background: g.bg }}
+      className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white
+        shadow-md ${g.shadow} hover:shadow-lg hover:brightness-110 hover:-translate-y-0.5
+        active:translate-y-0 active:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0
+        transition-all duration-200`}
     >
       {children}
     </button>
   )
 }
 
+/** Hành động chính (lưu, thêm, xác nhận) — xanh dương */
+export function PrimaryBtn(props) { return <GradientBtn variant="primary" {...props} /> }
+/** Hành động phá hủy (xóa) — đỏ */
+export function DangerBtn(props) { return <GradientBtn variant="danger" {...props} /> }
+/** Hành động cảnh báo (khóa, đóng, từ chối) — vàng/cam đậm */
+export function WarningBtn(props) { return <GradientBtn variant="warning" {...props} /> }
+/** Hành động phụ nổi bật (gộp, tách, chuyển) — cam */
+export function AccentBtn(props) { return <GradientBtn variant="accent" {...props} /> }
+/** Hành động xác nhận tích cực (duyệt, mở khóa, kích hoạt) — xanh lá */
+export function SuccessBtn(props) { return <GradientBtn variant="success" {...props} /> }
+/** Hành động đặc biệt/nổi bật — tím */
+export function PurpleBtn(props) { return <GradientBtn variant="purple" {...props} /> }
+
 export function SecondaryBtn({ children, onClick, disabled }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-foreground bg-card border border-border hover:bg-secondary disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm"
+      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-foreground bg-card
+        border border-border hover:border-primary/40 hover:bg-primary/5 hover:text-primary hover:-translate-y-0.5
+        active:translate-y-0 shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed
+        transition-all duration-200"
     >
       {children}
     </button>
@@ -49,15 +81,15 @@ export function SecondaryBtn({ children, onClick, disabled }) {
 export function Badge({ children, variant = 'default' }) {
   const cls = {
     default: 'bg-secondary text-secondary-foreground',
-    blue:    'bg-blue-100 text-blue-700',
-    green:   'bg-emerald-100 text-emerald-700',
-    red:     'bg-red-100 text-red-700',
-    amber:   'bg-amber-100 text-amber-700',
-    orange:  'bg-orange-100 text-orange-700',
-    purple:  'bg-violet-100 text-violet-700',
+    blue:    'bg-gradient-to-r from-blue-500/15 to-sky-500/15 text-blue-700 ring-1 ring-blue-500/20',
+    green:   'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 text-emerald-700 ring-1 ring-emerald-500/20',
+    red:     'bg-gradient-to-r from-red-500/15 to-rose-500/15 text-red-700 ring-1 ring-red-500/20',
+    amber:   'bg-gradient-to-r from-amber-500/15 to-yellow-500/15 text-amber-700 ring-1 ring-amber-500/20',
+    orange:  'bg-gradient-to-r from-orange-500/15 to-amber-500/15 text-orange-700 ring-1 ring-orange-500/20',
+    purple:  'bg-gradient-to-r from-violet-500/15 to-purple-500/15 text-violet-700 ring-1 ring-violet-500/20',
   }
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cls[variant] || cls.default}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${cls[variant] || cls.default}`}>
       {children}
     </span>
   )
@@ -126,15 +158,16 @@ export function DataTable({ columns, children, empty = false }) {
 
 export function Tabs({ tabs, active, onChange }) {
   return (
-    <div className="flex items-center gap-1 p-1 bg-secondary rounded-md">
+    <div className="flex items-center gap-1 p-1 bg-secondary rounded-lg">
       {tabs.map(tab => (
         <button
           key={tab}
           onClick={() => onChange(tab)}
-          className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-all ${
+          style={active === tab ? { background: 'linear-gradient(135deg,#2563eb,#0ea5e9)' } : undefined}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
             active === tab
-              ? 'bg-card text-primary font-semibold shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'text-white font-semibold shadow-md shadow-blue-500/30'
+              : 'text-muted-foreground hover:text-foreground hover:bg-card/70'
           }`}
         >
           {tab}
@@ -178,10 +211,11 @@ export function ActionBtn({ icon: Icon, color = 'currentColor', onClick }) {
   return (
     <button
       onClick={onClick}
-      className="p-1.5 rounded-sm hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
-      style={{ color }}
+      className="p-1.5 rounded-md hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200 text-muted-foreground hover:text-foreground"
+      onMouseEnter={e => { e.currentTarget.style.background = `${color}15` }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
     >
-      <Icon size={14} />
+      <Icon size={14} style={{ color }} />
     </button>
   )
 }

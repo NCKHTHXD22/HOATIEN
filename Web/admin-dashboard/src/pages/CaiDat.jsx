@@ -268,14 +268,14 @@ function UsersPanel({ currentUser }) {
                   <button
                     onClick={() => setViewUser(u)}
                     title="Xem thông tin"
-                    className="p-1.5 rounded hover:bg-card text-muted-foreground hover:text-blue-500 transition-colors"
+                    className="p-1.5 rounded-md hover:bg-blue-500/10 text-muted-foreground hover:text-blue-500 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                   >
                     <Eye size={14} />
                   </button>
                   <button
                     onClick={() => openEdit(u)}
                     title="Chỉnh sửa"
-                    className="p-1.5 rounded hover:bg-card text-muted-foreground hover:text-amber-500 transition-colors"
+                    className="p-1.5 rounded-md hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
                   >
                     <Pencil size={14} />
                   </button>

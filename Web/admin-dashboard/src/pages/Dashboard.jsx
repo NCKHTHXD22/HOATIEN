@@ -3,11 +3,23 @@ import { useEffect, useState } from 'react'
 import {
   Users, Home, MapPin, ArrowUpDown,
   ArrowUpRight, TrendingUp, RefreshCw, ArrowUp,
+  ArrowRightLeft, Send, ClipboardList, BarChart3,
+  ArrowDownToLine, ArrowUpFromLine,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  PieChart, Pie, Cell,
 } from 'recharts'
 import * as reportService from '../services/reportService'
+
+const QUICK_ACTIONS = [
+  { to: '/ho-so',     label: 'Thêm hộ dân',       icon: Home,          color: '#2563eb', light: 'linear-gradient(135deg,#dbeafe,#bfdbfe)' },
+  { to: '/bien-dong',  label: 'Ghi nhận biến động', icon: ArrowRightLeft, color: '#ea580c', light: 'linear-gradient(135deg,#ffedd5,#fed7aa)' },
+  { to: '/thon-xom',   label: 'Thêm thôn',          icon: MapPin,        color: '#7c3aed', light: 'linear-gradient(135deg,#ede9fe,#ddd6fe)' },
+  { to: '/thong-bao',  label: 'Gửi tin Zalo',       icon: Send,          color: '#0891b2', light: 'linear-gradient(135deg,#cffafe,#a5f3fc)' },
+  { to: '/khao-sat',   label: 'Khảo sát nhanh',     icon: ClipboardList, color: '#d97706', light: 'linear-gradient(135deg,#fef3c7,#fde68a)' },
+  { to: '/bao-cao',    label: 'Báo cáo thống kê',   icon: BarChart3,     color: '#16a34a', light: 'linear-gradient(135deg,#dcfce7,#bbf7d0)' },
+]
 
 /* ── Count-up animation hook ───────────────────────────────────────────── */
 function useCountUp(target, duration = 1200) {
@@ -94,6 +106,25 @@ export default function Dashboard() {
     'Nhân khẩu': v.totalMembers,
   }))
 
+  const typeTotals = villageStats.reduce((acc, v) => ({
+    THUONG_TRU: acc.THUONG_TRU + (v.byType?.THUONG_TRU || 0),
+    TAM_TRU:    acc.TAM_TRU    + (v.byType?.TAM_TRU    || 0),
+    TAM_VANG:   acc.TAM_VANG   + (v.byType?.TAM_VANG   || 0),
+  }), { THUONG_TRU: 0, TAM_TRU: 0, TAM_VANG: 0 })
+
+  const typeData = [
+    { name: 'Thường trú', value: typeTotals.THUONG_TRU, color: '#2563eb' },
+    { name: 'Tạm trú',    value: typeTotals.TAM_TRU,    color: '#d97706' },
+    { name: 'Tạm vắng',   value: typeTotals.TAM_VANG,   color: '#9333ea' },
+  ].filter(d => d.value > 0)
+
+  const moveIn  = Number(movStats?.moveIn)  || 0
+  const moveOut = Number(movStats?.moveOut) || 0
+  const movementData = [
+    { name: 'Chuyển đến', value: moveIn,  color: '#16a34a' },
+    { name: 'Chuyển đi',  value: moveOut, color: '#dc2626' },
+  ]
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -118,44 +149,63 @@ export default function Dashboard() {
       </div>
 
       {/* ── Hero card ── */}
-      <div className="relative rounded-3xl overflow-hidden px-9 py-8 shadow-2xl shadow-primary/30 bg-hero-card">
+      <div className="relative rounded-3xl overflow-hidden px-9 py-8 shadow-xl shadow-slate-200/70 bg-white border border-slate-100">
         <div className="absolute -top-24 right-16 w-80 h-80 rounded-full pointer-events-none animate-[heroGlow_9s_ease-in-out_infinite]"
-             style={{ background: 'radial-gradient(circle,rgba(125,211,252,.5),transparent 65%)' }} />
-        <div className="absolute -bottom-28 -right-16 w-72 h-72 rounded-full pointer-events-none animate-[heroGlow2_11s_ease-in-out_infinite]"
-             style={{ background: 'radial-gradient(circle,rgba(96,165,250,.45),transparent 68%)' }} />
-        <div className="absolute inset-0 pointer-events-none opacity-50"
-             style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,.09) 1px,transparent 1px)', backgroundSize: '22px 22px' }} />
+             style={{ background: 'radial-gradient(circle,rgba(96,165,250,.32),transparent 65%)' }} />
+        <div className="absolute -bottom-28 -right-10 w-72 h-72 rounded-full pointer-events-none animate-[heroGlow2_11s_ease-in-out_infinite]"
+             style={{ background: 'radial-gradient(circle,rgba(217,70,239,.22),transparent 68%)' }} />
+        <div className="absolute -top-16 left-1/3 w-64 h-64 rounded-full pointer-events-none animate-[heroGlow_13s_ease-in-out_infinite]"
+             style={{ background: 'radial-gradient(circle,rgba(251,191,36,.2),transparent 70%)' }} />
+        <div className="absolute inset-0 pointer-events-none opacity-60"
+             style={{ backgroundImage: 'radial-gradient(rgba(37,99,235,.07) 1px,transparent 1px)', backgroundSize: '22px 22px' }} />
 
         <div className="relative z-10 flex items-end justify-between flex-wrap gap-7">
           <div>
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-[13px] font-semibold text-white">
-              <span className="w-2 h-2 rounded-full bg-sky-300 ring-4 ring-sky-300/30" />
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-[13px] font-semibold text-blue-700">
+              <span className="w-2 h-2 rounded-full bg-blue-500 ring-4 ring-blue-500/20" />
               Tổng dân số đang quản lý
             </span>
             <div className="flex items-baseline gap-3.5 mt-3.5">
-              <span className="text-[5.5rem] font-black text-white leading-[.85] tracking-tight"
-                    style={{ textShadow: '0 8px 30px rgba(0,0,0,.18)' }}>
+              <span
+                className="text-[5.5rem] font-black leading-[.85] tracking-tight"
+                style={{ background: 'linear-gradient(135deg,#2563eb,#9333ea,#ec4899)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}
+              >
                 {loading ? '…' : heroCount.toLocaleString('vi-VN')}
               </span>
-              <span className="text-lg font-semibold text-blue-200">nhân khẩu</span>
+              <span className="text-lg font-semibold text-slate-500">nhân khẩu</span>
             </div>
-            <p className="text-sm text-blue-100/90 mt-3">Cập nhật mới nhất — UBND Xã Hòa Tiến</p>
+            <p className="text-sm text-slate-400 mt-3">Cập nhật mới nhất — UBND Xã Hòa Tiến</p>
           </div>
 
           <div className="flex gap-3.5 flex-wrap">
             {[
-              { icon: Home,  label: 'Hộ dân',    val: households },
-              { icon: Users, label: 'Nhân khẩu', val: members },
-              { icon: MapPin, label: 'Thôn',     val: villages },
+              { icon: Home,  label: 'Hộ dân',    val: households, color: '#2563eb', light: 'linear-gradient(135deg,#dbeafe,#bfdbfe)' },
+              { icon: Users, label: 'Nhân khẩu', val: members,    color: '#059669', light: 'linear-gradient(135deg,#d1fae5,#a7f3d0)' },
+              { icon: MapPin, label: 'Thôn',     val: villages,   color: '#9333ea', light: 'linear-gradient(135deg,#f3e8ff,#e9d5ff)' },
             ].map(s => (
-              <div key={s.label} className="px-5 py-4 rounded-2xl bg-white/[.13] backdrop-blur-sm border border-white/20 min-w-[120px]">
-                <div className="flex items-center gap-1.5 text-[13px] font-medium text-blue-100">
-                  <s.icon size={14} className="text-sky-300" /> {s.label}
+              <div key={s.label} className="px-5 py-4 rounded-2xl border border-slate-100 min-w-[120px]" style={{ background: s.light }}>
+                <div className="flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: s.color }}>
+                  <s.icon size={14} /> {s.label}
                 </div>
-                <div className="text-2xl font-black text-white mt-1.5">{loading ? '…' : s.val.toLocaleString('vi-VN')}</div>
+                <div className="text-2xl font-black mt-1.5" style={{ color: s.color }}>{loading ? '…' : s.val.toLocaleString('vi-VN')}</div>
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ── Thao tác nhanh ── */}
+      <div className="bg-card rounded-2xl p-5 border border-border shadow-sm">
+        <p className="text-sm font-bold text-foreground mb-4">Thao tác nhanh</p>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          {QUICK_ACTIONS.map(qa => (
+            <a key={qa.to} href={qa.to} className="quick-action group">
+              <div className="quick-action-icon" style={{ background: qa.light }}>
+                <qa.icon size={18} style={{ color: qa.color }} />
+              </div>
+              <span className="quick-action-label">{qa.label}</span>
+            </a>
+          ))}
         </div>
       </div>
 
@@ -281,6 +331,77 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Hộ dân theo loại + Biến động dân cư ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Hộ dân theo loại cư trú */}
+        <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
+          <p className="text-base font-bold text-foreground">Hộ dân theo loại cư trú</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Phân loại thường trú / tạm trú / tạm vắng</p>
+          {loading || typeData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-56 rounded-xl bg-secondary border border-dashed border-border mt-4">
+              <Home size={28} className="text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">{loading ? 'Đang tải...' : 'Chưa có dữ liệu'}</p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4 mt-2">
+              <ResponsiveContainer width="50%" height={220}>
+                <PieChart>
+                  <Pie data={typeData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
+                    {typeData.map(d => <Cell key={d.name} fill={d.color} stroke="none" />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid hsl(var(--border))' }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex-1 space-y-3">
+                {typeData.map(d => (
+                  <div key={d.name} className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} /> {d.name}
+                    </span>
+                    <span className="text-sm font-black" style={{ color: d.color }}>{d.value.toLocaleString('vi-VN')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Biến động dân cư: chuyển đến / chuyển đi */}
+        <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
+          <p className="text-base font-bold text-foreground">Biến động dân cư</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Số lượt chuyển đến / chuyển đi</p>
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className="rounded-xl p-4 border border-emerald-100" style={{ background: 'linear-gradient(135deg,#ecfdf5,#d1fae5)' }}>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                <ArrowDownToLine size={14} /> Chuyển đến
+              </div>
+              <p className="text-2xl font-black text-emerald-700 mt-1.5">{loading ? '…' : moveIn.toLocaleString('vi-VN')}</p>
+            </div>
+            <div className="rounded-xl p-4 border border-red-100" style={{ background: 'linear-gradient(135deg,#fef2f2,#fee2e2)' }}>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
+                <ArrowUpFromLine size={14} /> Chuyển đi
+              </div>
+              <p className="text-2xl font-black text-red-700 mt-1.5">{loading ? '…' : moveOut.toLocaleString('vi-VN')}</p>
+            </div>
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center h-32 text-sm text-muted-foreground mt-3">Đang tải...</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={movementData} layout="vertical" margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                <XAxis type="number" hide />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fontWeight: 600, fill: '#475569' }} axisLine={false} tickLine={false} width={80} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid hsl(var(--border))' }} />
+                <Bar dataKey="value" radius={[0, 8, 8, 0]} maxBarSize={28}>
+                  {movementData.map(d => <Cell key={d.name} fill={d.color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
       </div>

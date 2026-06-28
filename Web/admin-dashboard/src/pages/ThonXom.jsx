@@ -109,8 +109,8 @@ export default function ThonXom() {
               <td className="px-5 py-3 text-sm">{v._count?.members ?? v.soDan ?? 0} người</td>
               <td className="px-5 py-3">
                 <div className="flex items-center gap-1">
-                  <button onClick={() => openEdit(v)} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-amber-500 transition-colors" title="Chỉnh sửa"><Pencil size={13} /></button>
-                  <button onClick={() => handleDelete(v)} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors" title="Xóa"><Trash2 size={13} /></button>
+                  <button onClick={() => openEdit(v)} className="p-1.5 rounded-md hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" title="Chỉnh sửa"><Pencil size={13} /></button>
+                  <button onClick={() => handleDelete(v)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" title="Xóa"><Trash2 size={13} /></button>
                 </div>
               </td>
             </tr>
