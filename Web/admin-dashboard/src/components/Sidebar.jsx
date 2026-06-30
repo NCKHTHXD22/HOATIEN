@@ -66,7 +66,6 @@ export default function Sidebar({ open }) {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-bold text-white truncate leading-tight">UBND Xã Hòa Tiến</p>
-          <p className="text-[11px] text-white/60 truncate">Cổng quản lý nội bộ</p>
         </div>
       </div>
 

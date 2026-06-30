@@ -332,7 +332,7 @@ export default function Login() {
           </div>
           <div>
             <div className="login-brand-title">UBND Xã Hòa Tiến</div>
-            <div className="login-brand-sub">Hệ thống quản lý hành chính</div>
+            <div className="login-brand-sub">Hệ thống Quản lý thông tin chủ hộ- Xã Hòa Tiến</div>
           </div>
         </div>
 
@@ -395,9 +395,8 @@ export default function Login() {
           <div className="login-divider" />
 
           <div className="login-features">
-            <Feature label="Tiếp nhận qua Zalo" />
-            <Feature label="Theo dõi xử lý" />
-            <Feature label="Phản hồi nhanh" />
+            <Feature label="Quản lý thông tin chủ hộ" />
+            <Feature label="Thông tin, cảnh báo đến người dân" />
           </div>
         </div>
 

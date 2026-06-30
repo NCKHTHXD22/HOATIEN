@@ -132,7 +132,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[1.7rem] font-extrabold text-foreground tracking-tight">
-            Tổng quan hệ thống quản lý dân số
+            Hệ thống Quản lý thông tin chủ hộ- Xã Hòa Tiến
           </h1>
           <p className="text-sm text-muted-foreground mt-1.5 flex items-center gap-1.5">
             <MapPin size={14} /> UBND Xã Hòa Tiến
