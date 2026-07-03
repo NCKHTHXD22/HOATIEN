@@ -147,12 +147,15 @@ export default function HoSo() {
     } catch { /* ignore */ } finally { setLoading(false) }
   }, [])
 
+  const loadVillages = useCallback(
+    () => villageService.getAll().then(r => setVillages(r.data.data || [])).catch(() => {}),
+    [],
+  )
+
   useEffect(() => { loadStats() }, [loadStats])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadList(tab, search, page, villageFilter, toFilter) }, [tab, page, villageFilter, toFilter])
-  useEffect(() => {
-    villageService.getAll().then(r => setVillages(r.data.data || [])).catch(() => {})
-  }, [])
+  useEffect(() => { loadVillages() }, [loadVillages])
   useEffect(() => {
     householdService.getToList(villageFilter || undefined)
       .then(r => setToOptions(r.data.data || []))
@@ -766,7 +769,7 @@ export default function HoSo() {
         open={showImport}
         onClose={() => setShowImport(false)}
         villages={villages}
-        onDone={refresh}
+        onDone={async () => { await Promise.all([refresh(), loadVillages()]) }}
       />
     </div>
   )
