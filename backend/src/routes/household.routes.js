@@ -80,6 +80,7 @@ router.post("/import/preview", requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), (req
     try {
       const parsed = await parseHouseholdExcel(req.file.buffer);
       if (parsed.householdCount === 0) return fail(res, "Không đọc được hộ nào — kiểm tra lại định dạng file");
+      await HouseholdService.annotateExistingCccd(parsed); // đối chiếu CCCD với DB (bỏ trống cái trùng + cảnh báo)
       const token = putImport(parsed);
       ok(res, {
         importToken: token,
@@ -91,7 +92,7 @@ router.post("/import/preview", requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), (req
         warnings: parsed.warnings,
         preview: parsed.households.slice(0, 10).map((h) => ({
           soThanhVien: h.members.length,
-          members: h.members.map((m) => ({ hoTen: m.hoTen, ngaySinh: m.ngaySinh, quanHeChuHo: m.quanHeChuHo, sdt: m.sdt, laChuHo: m.laChuHo })),
+          members: h.members.map((m) => ({ hoTen: m.hoTen, ngaySinh: m.ngaySinh, gioiTinh: m.gioiTinh, cccd: m.cccd, quanHeChuHo: m.quanHeChuHo, sdt: m.sdt, laChuHo: m.laChuHo })),
         })),
       }, "Đã phân tích file, xem trước trước khi ghi");
     } catch (e) { fail(res, "Lỗi đọc file: " + e.message, 500); }

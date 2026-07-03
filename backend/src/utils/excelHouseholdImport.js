@@ -42,12 +42,30 @@ function parseDob(raw) {
   return { iso: null, warn: `Không đọc được ngày sinh "${s}"` };
 }
 
-const HEADER_KW = ["ho va ten", "ho ten", "ngay thang", "ngay sinh", "chu ho", "quan he", "noi thuong tru", "so dien thoai", "tong cong", "nhan khau", "stt"];
+// "Nam" → NAM, "Nữ" → NU, khác → KHAC, trống → null
+function parseGender(raw) {
+  const n = norm(raw);
+  if (!n) return null;
+  if (n === "nam") return "NAM";
+  if (n === "nu") return "NU";
+  return "KHAC";
+}
+
+// CCCD: bỏ khoảng trắng/dấu chấm; hợp lệ = 9 hoặc 12 chữ số; sai → null + cảnh báo
+function cleanCccd(raw) {
+  const s = String(raw || "").replace(/[\s.\-]/g, "").trim();
+  if (!s) return { cccd: null, warn: null };
+  if (!/^\d{9}$|^\d{12}$/.test(s)) return { cccd: null, warn: `CCCD không hợp lệ "${raw}"` };
+  return { cccd: s, warn: null };
+}
+
+const HEADER_KW = ["ho va ten", "ho ten", "ngay thang", "ngay sinh", "chu ho", "quan he", "noi thuong tru", "so dien thoai", "gioi tinh", "cccd", "can cuoc", "tong cong", "nhan khau", "stt"];
 const isHeaderish = (t) => { const n = norm(t); return !n || HEADER_KW.some((k) => n.includes(k)) || /^\d+$/.test(n); };
 
 // Dò cột theo từ khóa header (fallback vị trí cố định của mẫu xã Hòa Tiến) + dòng header cuối
 function detectColumns(ws) {
-  const col = { hoStt: 1, hoTen: 3, ngaySinh: 4, quanHe: 5, to: 6, sdt: 7, headerRow: 0 };
+  // gioiTinh/cccd mặc định 0 = không có (chỉ đọc khi dò thấy tiêu đề)
+  const col = { hoStt: 1, hoTen: 3, ngaySinh: 4, quanHe: 5, to: 6, sdt: 7, gioiTinh: 0, cccd: 0, headerRow: 0 };
   for (let r = 1; r <= Math.min(12, ws.rowCount); r++) {
     const row = ws.getRow(r);
     for (let c = 1; c <= Math.min(30, ws.columnCount); c++) {
@@ -56,6 +74,8 @@ function detectColumns(ws) {
       if (n === "ho") col.hoStt = c;
       else if (n.includes("ho va ten") || n === "ho ten") { col.hoTen = c; col.headerRow = Math.max(col.headerRow, r); }
       else if (n.includes("ngay") && n.includes("sinh")) col.ngaySinh = c;
+      else if (n.includes("gioi tinh")) col.gioiTinh = c;
+      else if (n.includes("cccd") || n.includes("can cuoc")) col.cccd = c;
       else if (n.includes("quan he")) col.quanHe = c;
       else if (n.includes("thuong tru") || (n.includes("noi") && n.includes("tru"))) col.to = c;
       else if (n.includes("so dien thoai")) col.sdt = c; // "số điện thoại" — tránh trùng cột khảo sát "điện thoại thông minh"
@@ -114,13 +134,31 @@ async function parseHouseholdExcel(buffer) {
     const { iso, warn } = parseDob(row.getCell(C.ngaySinh).value instanceof Date ? row.getCell(C.ngaySinh).value : cellStr(row.getCell(C.ngaySinh)));
     if (warn) warnings.push({ row: r, name, msg: warn });
 
+    const gioiTinh = C.gioiTinh ? parseGender(cellStr(row.getCell(C.gioiTinh))) : null;
+    let cccd = null;
+    if (C.cccd) {
+      const cc = cleanCccd(cellStr(row.getCell(C.cccd)));
+      cccd = cc.cccd;
+      if (cc.warn) warnings.push({ row: r, name, msg: cc.warn });
+    }
+
     cur.members.push({
       hoTen: name,
       ngaySinh: iso,
+      gioiTinh,
+      cccd,
       quanHeChuHo: quanHe || NO_INFO,
       laChuHo: /^chu ho$/.test(norm(quanHe)),
       sdt: cellStr(row.getCell(C.sdt)) || null,
     });
+  }
+
+  // Chống trùng CCCD NGAY TRONG FILE (giữ người đầu, người sau để trống)
+  const seenCccd = new Set();
+  for (const h of households) for (const m of h.members) {
+    if (!m.cccd) continue;
+    if (seenCccd.has(m.cccd)) { warnings.push({ row: null, name: m.hoTen, msg: `CCCD ${m.cccd} bị trùng trong file → để trống` }); m.cccd = null; }
+    else seenCccd.add(m.cccd);
   }
 
   // Đảm bảo mỗi hộ có đúng 1 chủ hộ

@@ -246,6 +246,24 @@ async function mergeHouseholds({ targetId, sourceIds, ghiChu }, performedBy) {
   };
 }
 
+// Đối chiếu CCCD trong file với CCCD đã có trong DB → cái nào trùng thì bỏ trống + cảnh báo
+// (tránh vi phạm ràng buộc UNIQUE làm rollback cả lô). Gọi ở bước xem trước.
+async function annotateExistingCccd(parsed) {
+  const list = [];
+  for (const h of parsed.households) for (const m of h.members) if (m.cccd) list.push(m.cccd);
+  if (!list.length) return parsed;
+  const rows = await prisma.member.findMany({ where: { cccd: { in: [...new Set(list)] } }, select: { cccd: true } });
+  const exists = new Set(rows.map((r) => r.cccd));
+  if (!exists.size) return parsed;
+  for (const h of parsed.households) for (const m of h.members) {
+    if (m.cccd && exists.has(m.cccd)) {
+      parsed.warnings.push({ row: null, name: m.hoTen, msg: `CCCD ${m.cccd} đã tồn tại trong hệ thống → để trống` });
+      m.cccd = null;
+    }
+  }
+  return parsed;
+}
+
 // Ghi hàng loạt hộ + nhân khẩu từ kết quả parse Excel. Toàn bộ trong 1 transaction.
 async function commitImport(parsed, villageId, performedBy) {
   const pad3 = (n) => String(n).padStart(3, "0");
@@ -276,7 +294,7 @@ async function commitImport(parsed, villageId, performedBy) {
     for (const h of parsed.households) {
       seq += 1;
       const members = h.members.map((m) =>
-        normalizeMember({ hoTen: m.hoTen, ngaySinh: m.ngaySinh, sdt: m.sdt, quanHeChuHo: m.quanHeChuHo, laChuHo: m.laChuHo })
+        normalizeMember({ hoTen: m.hoTen, ngaySinh: m.ngaySinh, gioiTinh: m.gioiTinh || null, cccd: m.cccd, sdt: m.sdt, quanHeChuHo: m.quanHeChuHo, laChuHo: m.laChuHo })
       );
       const row = await tx.household.create({
         data: {
@@ -304,4 +322,4 @@ async function commitImport(parsed, villageId, performedBy) {
   return { village: { id: village.id, ten: village.ten, ma: village.ma }, households: createdIds.length, members: parsed.memberCount };
 }
 
-module.exports = { getAll, getDistinctTo, getById, create, update, remove, splitHousehold, mergeHouseholds, commitImport };
+module.exports = { getAll, getDistinctTo, getById, create, update, remove, splitHousehold, mergeHouseholds, commitImport, annotateExistingCccd };

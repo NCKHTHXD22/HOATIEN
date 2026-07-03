@@ -896,7 +896,9 @@ function ImportExcelModal({ open, onClose, villages, onDone }) {
                     <p key={j} className="text-[11px] text-muted-foreground">
                       {m.laChuHo ? '★ ' : '   '}{m.hoTen}
                       {' · '}{m.ngaySinh || 'Không có NS'}
+                      {m.gioiTinh ? ' · ' + GENDER_LABEL[m.gioiTinh] : ''}
                       {' · '}{m.quanHeChuHo}
+                      {m.cccd ? ' · CCCD ' + m.cccd : ''}
                       {m.sdt ? ' · ' + m.sdt : ''}
                     </p>
                   ))}
