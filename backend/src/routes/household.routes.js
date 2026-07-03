@@ -80,7 +80,6 @@ router.post("/import/preview", requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"), (req
     try {
       const parsed = await parseHouseholdExcel(req.file.buffer);
       if (parsed.householdCount === 0) return fail(res, "Không đọc được hộ nào — kiểm tra lại định dạng file");
-      await HouseholdService.annotateExistingCccd(parsed); // đối chiếu CCCD với DB (bỏ trống cái trùng + cảnh báo)
       const token = putImport(parsed);
       ok(res, {
         importToken: token,
@@ -114,7 +113,7 @@ router.post(
     try {
       const result = await HouseholdService.commitImport(entry.parsed, villageId || null, req.user.id);
       importCache.delete(importToken);
-      created(res, result, `Đã import ${result.households} hộ / ${result.members} nhân khẩu vào ${result.village.ten}`);
+      created(res, result, `Thêm mới ${result.added} · Cập nhật ${result.updated} · Bỏ qua ${result.skipped} (vào ${result.village.ten})`);
     } catch (err) { entry.committed = false; next(err); }
   }
 );

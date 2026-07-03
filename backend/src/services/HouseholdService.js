@@ -246,80 +246,126 @@ async function mergeHouseholds({ targetId, sourceIds, ghiChu }, performedBy) {
   };
 }
 
-// Đối chiếu CCCD trong file với CCCD đã có trong DB → cái nào trùng thì bỏ trống + cảnh báo
-// (tránh vi phạm ràng buộc UNIQUE làm rollback cả lô). Gọi ở bước xem trước.
-async function annotateExistingCccd(parsed) {
-  const list = [];
-  for (const h of parsed.households) for (const m of h.members) if (m.cccd) list.push(m.cccd);
-  if (!list.length) return parsed;
-  const rows = await prisma.member.findMany({ where: { cccd: { in: [...new Set(list)] } }, select: { cccd: true } });
-  const exists = new Set(rows.map((r) => r.cccd));
-  if (!exists.size) return parsed;
-  for (const h of parsed.households) for (const m of h.members) {
-    if (m.cccd && exists.has(m.cccd)) {
-      parsed.warnings.push({ row: null, name: m.hoTen, msg: `CCCD ${m.cccd} đã tồn tại trong hệ thống → để trống` });
-      m.cccd = null;
-    }
-  }
-  return parsed;
-}
+// Khóa định danh 1 người: ưu tiên CCCD, không có thì Họ tên (chuẩn hóa) + Ngày sinh + Tổ
+const _deacc = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+const _key = (s) => _deacc(s).toLowerCase().replace(/\s+/g, " ").trim();
+const _ymd = (d) => {
+  if (!d) return "";
+  if (typeof d === "string") { const m = d.match(/^(\d{4}-\d{2}-\d{2})/); if (m) return m[1]; }
+  const x = new Date(d);
+  return isNaN(x) ? "" : `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, "0")}-${String(x.getUTCDate()).padStart(2, "0")}`;
+};
+const ndKey = (hoTen, ngaySinh, to) => `nd:${_key(hoTen)}|${_ymd(ngaySinh)}|${_key(to)}`;
 
-// Ghi hàng loạt hộ + nhân khẩu từ kết quả parse Excel. Toàn bộ trong 1 transaction.
+// Import Excel dạng UPSERT: cùng người (theo CCCD, hoặc Họ tên+Ngày sinh+Tổ)
+// → cập nhật nếu có thay đổi / bỏ qua nếu giống; chưa có → thêm mới. Không xóa ai.
 async function commitImport(parsed, villageId, performedBy) {
   const pad3 = (n) => String(n).padStart(3, "0");
+  const to = parsed.to || "";
 
-  // 1) Xác định thôn: dùng thôn đã chọn, hoặc tìm/tạo theo mã suy ra từ file
+  // 1) Thôn
   let village;
   if (villageId) {
     village = await prisma.village.findUnique({ where: { id: villageId } });
     if (!village) throw new Error("Không tìm thấy thôn đã chọn");
   } else {
     village = await prisma.village.findUnique({ where: { ma: parsed.villageMaSuggest } });
-    if (!village) {
-      village = await prisma.village.create({
-        data: { ma: parsed.villageMaSuggest, ten: parsed.villageName || parsed.villageMaSuggest, moTa: "Xã Hòa Tiến - TP Đà Nẵng" },
-      });
-    }
+    if (!village) village = await prisma.village.create({
+      data: { ma: parsed.villageMaSuggest, ten: parsed.villageName || parsed.villageMaSuggest, moTa: "Xã Hòa Tiến - TP Đà Nẵng" },
+    });
   }
 
-  // 2) Sinh mã hộ khẩu: <MÃ THÔN>[-T<số tổ>]-<seq>, tiếp nối số hộ đã có cùng prefix
-  const toNum = String(parsed.to || "").match(/\d+/)?.[0] || "";
-  const prefix = `${village.ma}${toNum ? "-T" + toNum : ""}`;
-  const existed = await prisma.household.count({ where: { villageId: village.id, soHoKhau: { startsWith: prefix + "-" } } });
-  let seq = existed;
-  const diaChi = [parsed.to, parsed.villageName || village.ten, "Xã Hòa Tiến"].filter(Boolean).join(", ");
+  // 2) Nạp toàn bộ nhân khẩu hiện có để đối chiếu (quy mô 1 xã ~ vài nghìn → 1 query)
+  const existing = await prisma.member.findMany({
+    select: { id: true, hoTen: true, ngaySinh: true, gioiTinh: true, cccd: true, sdt: true, quanHeChuHo: true, laChuHo: true, householdId: true, household: { select: { to: true } } },
+  });
+  const byCccd = new Map();
+  const byNd = new Map();
+  for (const m of existing) {
+    if (m.cccd) byCccd.set(m.cccd, m);
+    byNd.set(ndKey(m.hoTen, m.ngaySinh, m.household?.to || to), m);
+  }
+  const findExisting = (m) => (m.cccd && byCccd.get(m.cccd)) || byNd.get(ndKey(m.hoTen, m.ngaySinh, to)) || null;
+  const remember = (m) => { if (m.cccd) byCccd.set(m.cccd, m); byNd.set(ndKey(m.hoTen, m.ngaySinh, to), m); };
 
-  const createdIds = [];
+  // Gộp cập nhật: chỉ ghi đè bằng giá trị KHÔNG rỗng của file (không xóa dữ liệu cũ bằng ô trống)
+  const buildUpdate = (ex, m) => {
+    const data = {};
+    if (m.hoTen && m.hoTen !== ex.hoTen) data.hoTen = m.hoTen;
+    if (_ymd(m.ngaySinh) && _ymd(m.ngaySinh) !== _ymd(ex.ngaySinh)) data.ngaySinh = new Date(m.ngaySinh);
+    if (m.gioiTinh && m.gioiTinh !== ex.gioiTinh) data.gioiTinh = m.gioiTinh;
+    if (m.sdt && m.sdt !== ex.sdt) data.sdt = m.sdt;
+    if (m.quanHeChuHo && m.quanHeChuHo !== "Không có thông tin" && m.quanHeChuHo !== ex.quanHeChuHo) data.quanHeChuHo = m.quanHeChuHo;
+    if (m.cccd && m.cccd !== ex.cccd) { const owner = byCccd.get(m.cccd); if (!owner || owner.id === ex.id) data.cccd = m.cccd; }
+    return data;
+  };
+  const mkMember = (m, laChuHo) => normalizeMember({ hoTen: m.hoTen, ngaySinh: m.ngaySinh, gioiTinh: m.gioiTinh || null, cccd: m.cccd, sdt: m.sdt, quanHeChuHo: m.quanHeChuHo, laChuHo });
+
+  const stats = { newHouseholds: 0, added: 0, updated: 0, skipped: 0 };
+  const touched = new Set();
+  const toNum = String(to).match(/\d+/)?.[0] || "";
+  const prefix = `${village.ma}${toNum ? "-T" + toNum : ""}`;
+  const diaChi = [to, parsed.villageName || village.ten, "Xã Hòa Tiến"].filter(Boolean).join(", ");
+  let seq = await prisma.household.count({ where: { villageId: village.id, soHoKhau: { startsWith: prefix + "-" } } });
+
+  const applyExisting = async (tx, ex, m) => {
+    const upd = buildUpdate(ex, m);
+    if (Object.keys(upd).length) { upd.updatedAt = new Date(); await tx.member.update({ where: { id: ex.id }, data: upd }); Object.assign(ex, upd); stats.updated++; }
+    else stats.skipped++;
+  };
+
   await prisma.$transaction(async (tx) => {
     for (const h of parsed.households) {
-      seq += 1;
-      const members = h.members.map((m) =>
-        normalizeMember({ hoTen: m.hoTen, ngaySinh: m.ngaySinh, gioiTinh: m.gioiTinh || null, cccd: m.cccd, sdt: m.sdt, quanHeChuHo: m.quanHeChuHo, laChuHo: m.laChuHo })
-      );
-      const row = await tx.household.create({
-        data: {
-          soHoKhau: `${prefix}-${pad3(seq)}`,
-          diaChi,
-          to: parsed.to || null,
-          villageId: village.id,
-          soNhanKhau: members.length,
-          members: { create: members },
-        },
-        select: { id: true },
-      });
-      createdIds.push(row.id);
+      const head = h.members.find((x) => x.laChuHo) || h.members[0];
+      const headExisting = head ? findExisting(head) : null;
+
+      if (headExisting) {
+        // Hộ đã có → upsert từng thành viên vào đúng hộ hiện tại của chủ hộ
+        const hhId = headExisting.householdId;
+        for (const m of h.members) {
+          const ex = findExisting(m);
+          if (ex) { await applyExisting(tx, ex, m); touched.add(ex.householdId); }
+          else {
+            const c = await tx.member.create({ data: { ...mkMember(m, false), householdId: hhId }, select: { id: true, cccd: true, hoTen: true, ngaySinh: true, householdId: true } });
+            remember(c); stats.added++; touched.add(hhId);
+          }
+        }
+      } else {
+        // Hộ mới → tạo hộ + thành viên mới; ai đã tồn tại theo CCCD thì cập nhật, không tạo trùng
+        const toCreate = [];
+        for (const m of h.members) {
+          const exC = m.cccd ? byCccd.get(m.cccd) : null;
+          if (exC) await applyExisting(tx, exC, m);
+          else toCreate.push(mkMember(m, m.laChuHo));
+        }
+        if (toCreate.length) {
+          seq += 1;
+          const hh = await tx.household.create({
+            data: { soHoKhau: `${prefix}-${pad3(seq)}`, diaChi, to: to || null, villageId: village.id, soNhanKhau: toCreate.length, members: { create: toCreate } },
+            select: { id: true, members: { select: { id: true, cccd: true, hoTen: true, ngaySinh: true, householdId: true } } },
+          });
+          hh.members.forEach(remember);
+          stats.newHouseholds++; stats.added += toCreate.length; touched.add(hh.id);
+        }
+      }
     }
-  }, { timeout: 120000, maxWait: 20000 });
+
+    // Đồng bộ lại số nhân khẩu cho các hộ bị đụng
+    for (const id of touched) {
+      const cnt = await tx.member.count({ where: { householdId: id } });
+      await tx.household.update({ where: { id }, data: { soNhanKhau: cnt } });
+    }
+  }, { timeout: 180000, maxWait: 20000 });
 
   AuditService.log({
     entityType: "village", entityId: village.id, action: "IMPORT",
-    newData: { households: createdIds.length, members: parsed.memberCount, thon: village.ten, to: parsed.to },
-    performedBy, note: `Import Excel: ${createdIds.length} hộ / ${parsed.memberCount} nhân khẩu`,
+    newData: { ...stats, thon: village.ten, to },
+    performedBy, note: `Import Excel: +${stats.added} mới / ~${stats.updated} cập nhật / ${stats.skipped} bỏ qua`,
   });
-  createdIds.forEach((id) => SearchService.syncIndex(id).catch(() => {}));
+  touched.forEach((id) => SearchService.syncIndex(id).catch(() => {}));
   ReportCacheRepo.invalidateAll().catch(() => {});
 
-  return { village: { id: village.id, ten: village.ten, ma: village.ma }, households: createdIds.length, members: parsed.memberCount };
+  return { village: { id: village.id, ten: village.ten, ma: village.ma }, ...stats };
 }
 
-module.exports = { getAll, getDistinctTo, getById, create, update, remove, splitHousehold, mergeHouseholds, commitImport, annotateExistingCccd };
+module.exports = { getAll, getDistinctTo, getById, create, update, remove, splitHousehold, mergeHouseholds, commitImport, ndKey };

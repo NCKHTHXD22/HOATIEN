@@ -911,14 +911,24 @@ function ImportExcelModal({ open, onClose, villages, onDone }) {
 
       {/* Bước 3: kết quả */}
       {step === 'done' && result && (
-        <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+        <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
           <CheckCircle size={40} className="text-green-500" />
-          <div>
-            <p className="text-base font-bold text-foreground">Import thành công!</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Đã thêm <strong>{result.households} hộ</strong> · <strong>{result.members} nhân khẩu</strong> vào <strong>{result.village.ten}</strong>
-            </p>
+          <p className="text-base font-bold text-foreground">Import hoàn tất — {result.village.ten}</p>
+          <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
+            <div className="px-3 py-3 rounded-lg bg-green-50 border border-green-200">
+              <p className="text-xl font-bold text-green-600">{result.added}</p>
+              <p className="text-[11px] text-green-700">Thêm mới</p>
+            </div>
+            <div className="px-3 py-3 rounded-lg bg-amber-50 border border-amber-200">
+              <p className="text-xl font-bold text-amber-600">{result.updated}</p>
+              <p className="text-[11px] text-amber-700">Cập nhật</p>
+            </div>
+            <div className="px-3 py-3 rounded-lg bg-slate-50 border border-slate-200">
+              <p className="text-xl font-bold text-slate-500">{result.skipped}</p>
+              <p className="text-[11px] text-slate-600">Bỏ qua (trùng)</p>
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground">{result.newHouseholds} hộ mới được tạo</p>
         </div>
       )}
     </Modal>
