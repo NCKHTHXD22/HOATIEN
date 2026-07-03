@@ -22,3 +22,16 @@ export const remove = (id) => api.delete(`/households/${id}`)
 export const split = (id, data) => api.post(`/households/${id}/split`, data)
 
 export const merge = (data) => api.post('/households/merge', data)
+
+// Import Excel — xem trước (upload file) rồi ghi (commit token)
+export const previewImport = (file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return api.post('/households/import/preview', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+}
+
+export const commitImport = (data) =>
+  api.post('/households/import/commit', data, { timeout: 120000 })

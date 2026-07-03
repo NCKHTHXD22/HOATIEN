@@ -246,4 +246,62 @@ async function mergeHouseholds({ targetId, sourceIds, ghiChu }, performedBy) {
   };
 }
 
-module.exports = { getAll, getDistinctTo, getById, create, update, remove, splitHousehold, mergeHouseholds };
+// Ghi hàng loạt hộ + nhân khẩu từ kết quả parse Excel. Toàn bộ trong 1 transaction.
+async function commitImport(parsed, villageId, performedBy) {
+  const pad3 = (n) => String(n).padStart(3, "0");
+
+  // 1) Xác định thôn: dùng thôn đã chọn, hoặc tìm/tạo theo mã suy ra từ file
+  let village;
+  if (villageId) {
+    village = await prisma.village.findUnique({ where: { id: villageId } });
+    if (!village) throw new Error("Không tìm thấy thôn đã chọn");
+  } else {
+    village = await prisma.village.findUnique({ where: { ma: parsed.villageMaSuggest } });
+    if (!village) {
+      village = await prisma.village.create({
+        data: { ma: parsed.villageMaSuggest, ten: parsed.villageName || parsed.villageMaSuggest, moTa: "Xã Hòa Tiến - TP Đà Nẵng" },
+      });
+    }
+  }
+
+  // 2) Sinh mã hộ khẩu: <MÃ THÔN>[-T<số tổ>]-<seq>, tiếp nối số hộ đã có cùng prefix
+  const toNum = String(parsed.to || "").match(/\d+/)?.[0] || "";
+  const prefix = `${village.ma}${toNum ? "-T" + toNum : ""}`;
+  const existed = await prisma.household.count({ where: { villageId: village.id, soHoKhau: { startsWith: prefix + "-" } } });
+  let seq = existed;
+  const diaChi = [parsed.to, parsed.villageName || village.ten, "Xã Hòa Tiến"].filter(Boolean).join(", ");
+
+  const createdIds = [];
+  await prisma.$transaction(async (tx) => {
+    for (const h of parsed.households) {
+      seq += 1;
+      const members = h.members.map((m) =>
+        normalizeMember({ hoTen: m.hoTen, ngaySinh: m.ngaySinh, sdt: m.sdt, quanHeChuHo: m.quanHeChuHo, laChuHo: m.laChuHo })
+      );
+      const row = await tx.household.create({
+        data: {
+          soHoKhau: `${prefix}-${pad3(seq)}`,
+          diaChi,
+          to: parsed.to || null,
+          villageId: village.id,
+          soNhanKhau: members.length,
+          members: { create: members },
+        },
+        select: { id: true },
+      });
+      createdIds.push(row.id);
+    }
+  }, { timeout: 120000, maxWait: 20000 });
+
+  AuditService.log({
+    entityType: "village", entityId: village.id, action: "IMPORT",
+    newData: { households: createdIds.length, members: parsed.memberCount, thon: village.ten, to: parsed.to },
+    performedBy, note: `Import Excel: ${createdIds.length} hộ / ${parsed.memberCount} nhân khẩu`,
+  });
+  createdIds.forEach((id) => SearchService.syncIndex(id).catch(() => {}));
+  ReportCacheRepo.invalidateAll().catch(() => {});
+
+  return { village: { id: village.id, ten: village.ten, ma: village.ma }, households: createdIds.length, members: parsed.memberCount };
+}
+
+module.exports = { getAll, getDistinctTo, getById, create, update, remove, splitHousehold, mergeHouseholds, commitImport };

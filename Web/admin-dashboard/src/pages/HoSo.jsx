@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Filter, Home, Users, ArrowRightLeft, CheckCircle,
   Eye, Pencil, Trash2, ArrowDownToLine, ArrowUpFromLine, History, Scissors, GitMerge,
+  FileUp, FileSpreadsheet, AlertTriangle, Loader2,
 } from 'lucide-react'
 import {
   PageHeader, PrimaryBtn, SecondaryBtn, AccentBtn, DataTable, Tabs,
@@ -108,6 +109,9 @@ export default function HoSo() {
   const [mergeNote, setMergeNote]         = useState('')
   const [mergeErr, setMergeErr]           = useState('')
   const [mergeSaving, setMergeSaving]     = useState(false)
+
+  /* Import Excel modal */
+  const [showImport, setShowImport]       = useState(false)
 
   /* ── Loaders ── */
   const loadStats = useCallback(async () => {
@@ -367,6 +371,7 @@ export default function HoSo() {
         action={
           <div className="flex items-center gap-2">
             <SecondaryBtn><Filter size={14} /> Lọc</SecondaryBtn>
+            <SecondaryBtn onClick={() => setShowImport(true)}><FileUp size={14} /> Import Excel</SecondaryBtn>
             <AccentBtn onClick={openMerge}><GitMerge size={14} /> Gộp hộ</AccentBtn>
             <PrimaryBtn onClick={openAdd}><Plus size={14} /> Thêm hộ dân</PrimaryBtn>
           </div>
@@ -755,10 +760,162 @@ export default function HoSo() {
           </div>
         )}
       </Modal>
+
+      {/* ══ Modal Import Excel ══ */}
+      <ImportExcelModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        villages={villages}
+        onDone={refresh}
+      />
     </div>
   )
 }
 
 function ErrBox({ msg }) {
   return <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-md">{msg}</p>
+}
+
+/* ══ Import hộ dân từ Excel (3 bước: chọn file → xem trước → kết quả) ══ */
+function ImportExcelModal({ open, onClose, villages, onDone }) {
+  const [step, setStep]       = useState('select')  // select | preview | done
+  const [file, setFile]       = useState(null)
+  const [data, setData]       = useState(null)      // response xem trước
+  const [villageId, setVId]   = useState('')        // '' = tạo thôn mới
+  const [loading, setLoading] = useState(false)
+  const [err, setErr]         = useState('')
+  const [result, setResult]   = useState(null)
+
+  const reset = () => { setStep('select'); setFile(null); setData(null); setVId(''); setErr(''); setResult(null) }
+  const close = () => { reset(); onClose() }
+
+  const doPreview = async (f) => {
+    if (!f) return
+    if (!/\.xlsx$/i.test(f.name)) { setErr('Chỉ nhận file .xlsx'); return }
+    setFile(f); setErr(''); setLoading(true)
+    try {
+      const res = await householdService.previewImport(f)
+      const d = res.data.data
+      setData(d)
+      // mặc định chọn thôn trùng tên; nếu không có → tạo mới ('')
+      const match = villages.find(v => v.ten?.trim().toLowerCase() === d.villageName?.trim().toLowerCase())
+      setVId(match ? match.id : '')
+      setStep('preview')
+    } catch (e) { setErr(e.response?.data?.message || 'Không đọc được file') }
+    finally { setLoading(false) }
+  }
+
+  const doCommit = async () => {
+    setErr(''); setLoading(true)
+    try {
+      const res = await householdService.commitImport({ importToken: data.importToken, villageId: villageId || undefined })
+      setResult(res.data.data)
+      setStep('done')
+      await onDone()
+    } catch (e) { setErr(e.response?.data?.message || 'Ghi dữ liệu thất bại') }
+    finally { setLoading(false) }
+  }
+
+  const villageOpts = [
+    { value: '', label: `➕ Tạo thôn mới: ${data?.villageName || '(từ file)'}` },
+    ...villages.map(v => ({ value: v.id, label: v.ten })),
+  ]
+
+  const footer =
+    step === 'select' ? <SecondaryBtn onClick={close}>Đóng</SecondaryBtn>
+    : step === 'preview' ? (
+      <>
+        <SecondaryBtn onClick={() => { setStep('select'); setData(null); setErr('') }}>← Chọn lại</SecondaryBtn>
+        <PrimaryBtn onClick={doCommit} disabled={loading}>
+          {loading ? <><Loader2 size={14} className="animate-spin" /> Đang ghi...</> : <>Xác nhận import {data?.householdCount} hộ</>}
+        </PrimaryBtn>
+      </>
+    ) : <PrimaryBtn onClick={close}>Xong</PrimaryBtn>
+
+  return (
+    <Modal wide title="Import hộ dân từ Excel" open={open} onClose={close} footer={footer}>
+      {err && <ErrBox msg={err} />}
+
+      {/* Bước 1: chọn file */}
+      {step === 'select' && (
+        <label className="flex flex-col items-center justify-center gap-3 py-10 px-4 rounded-xl border-2 border-dashed border-input hover:border-ring bg-secondary/40 cursor-pointer transition-colors text-center">
+          {loading ? <Loader2 size={32} className="text-primary animate-spin" /> : <FileSpreadsheet size={32} className="text-primary" />}
+          <div>
+            <p className="text-sm font-semibold text-foreground">{loading ? 'Đang phân tích file...' : 'Chọn file Excel (.xlsx)'}</p>
+            <p className="text-xs text-muted-foreground mt-1">Định dạng "Danh sách khảo sát tiêu chí hộ gia đình" theo thôn/tổ</p>
+          </div>
+          <input type="file" accept=".xlsx" className="hidden" disabled={loading}
+            onChange={e => doPreview(e.target.files?.[0])} />
+        </label>
+      )}
+
+      {/* Bước 2: xem trước */}
+      {step === 'preview' && data && (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              ['Thôn phát hiện', data.villageName || '—'],
+              ['Tổ', data.to || '—'],
+              ['Số hộ / nhân khẩu', `${data.householdCount} hộ · ${data.memberCount} người`],
+            ].map(([k, v]) => (
+              <div key={k} className="px-3 py-2 rounded-lg bg-secondary border border-border">
+                <p className="text-[11px] text-muted-foreground">{k}</p>
+                <p className="text-sm font-semibold text-foreground">{v}</p>
+              </div>
+            ))}
+          </div>
+
+          <Select label="Nhập vào thôn" value={villageId} onChange={setVId} options={villageOpts} />
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            Mã hộ khẩu sẽ tự sinh (VD: <span className="font-mono">{data.villageMaSuggest}{data.to ? '-T' + (data.to.match(/\d+/)?.[0] || '') : ''}-001</span>). Các trường thiếu để trống.
+          </p>
+
+          {data.warnings?.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5 mb-1">
+                <AlertTriangle size={13} /> {data.warnings.length} cảnh báo (không chặn import)
+              </p>
+              <ul className="text-[11px] text-amber-700 space-y-0.5 max-h-24 overflow-y-auto">
+                {data.warnings.slice(0, 20).map((w, i) => (
+                  <li key={i}>· {w.row ? `Dòng ${w.row}: ` : ''}{w.name} — {w.msg}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-semibold text-foreground mb-1.5">Xem trước {Math.min(10, data.householdCount)} hộ đầu:</p>
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              {data.preview.map((h, i) => (
+                <div key={i} className="rounded-md border border-border bg-secondary/50 px-3 py-2">
+                  <p className="text-xs font-semibold text-foreground mb-1">Hộ {i + 1} — {h.soThanhVien} nhân khẩu</p>
+                  {h.members.map((m, j) => (
+                    <p key={j} className="text-[11px] text-muted-foreground">
+                      {m.laChuHo ? '★ ' : '   '}{m.hoTen}
+                      {' · '}{m.ngaySinh || 'Không có NS'}
+                      {' · '}{m.quanHeChuHo}
+                      {m.sdt ? ' · ' + m.sdt : ''}
+                    </p>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Bước 3: kết quả */}
+      {step === 'done' && result && (
+        <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+          <CheckCircle size={40} className="text-green-500" />
+          <div>
+            <p className="text-base font-bold text-foreground">Import thành công!</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Đã thêm <strong>{result.households} hộ</strong> · <strong>{result.members} nhân khẩu</strong> vào <strong>{result.village.ten}</strong>
+            </p>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
 }
