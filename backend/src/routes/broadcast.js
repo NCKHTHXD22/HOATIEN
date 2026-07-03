@@ -162,6 +162,52 @@ router.post("/groups/:groupId/members/sync", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Duyệt thành viên chờ vào nhóm (GMF pending invite) ─────────────
+const _normalizePending = (m) =>
+  typeof m === "string"
+    ? { id: m, name: "", avatar: "" }
+    : {
+        id: String(m.id || m.user_id || m.uid || ""),
+        name: m.name || m.display_name || m.user_name || "",
+        avatar: m.avatar || m.avatar_url || "",
+      };
+
+// Danh sách người đang chờ duyệt vào nhóm
+router.get("/groups/:groupId/pending", async (req, res, next) => {
+  try {
+    const { members, total } = await zaloGmf.getPendingGroupMembers(req.params.groupId);
+    res.json({ total, members: members.map(_normalizePending) });
+  } catch (err) { next(err); }
+});
+
+// Duyệt: chấp nhận vào nhóm + lưu vào danh sách thành viên
+router.post("/groups/:groupId/pending/approve", async (req, res, next) => {
+  try {
+    const { users = [] } = req.body; // [{ id, name, avatar }]
+    if (!Array.isArray(users) || users.length === 0) return fail(res, "Cần chọn ít nhất 1 người để duyệt");
+    const groupId = req.params.groupId;
+    await zaloGmf.acceptGroupJoinRequest(groupId, users.map((u) => u.id));
+    for (const u of users) {
+      await ZaloGroupMember.findOneAndUpdate(
+        { groupId, zaloUserId: String(u.id) },
+        { $set: { displayName: u.name || "Người dùng Zalo", avatar: u.avatar || "" } },
+        { upsert: true }
+      ).catch(() => {});
+    }
+    res.json({ ok: true, approved: users.length });
+  } catch (err) { next(err); }
+});
+
+// Từ chối: không cho vào nhóm
+router.post("/groups/:groupId/pending/reject", async (req, res, next) => {
+  try {
+    const { userIds = [] } = req.body; // [id, ...]
+    if (!Array.isArray(userIds) || userIds.length === 0) return fail(res, "Cần chọn ít nhất 1 người để từ chối");
+    await zaloGmf.rejectGroupJoinRequest(req.params.groupId, userIds);
+    res.json({ ok: true, rejected: userIds.length });
+  } catch (err) { next(err); }
+});
+
 // ── Upload ảnh -> Zalo attachment_id ───────────────────────────────
 function makeUpload(filenamePrefix, opts) {
   const storage = multer.diskStorage({

@@ -1,9 +1,74 @@
 import { useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Loader2, Users, ChevronDown, ChevronRight, RefreshCw, Search, X } from 'lucide-react'
+import { Plus, Trash2, Loader2, Users, ChevronDown, ChevronRight, RefreshCw, Search, X, UserCheck, Check } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
+
+function PendingMembersModal({ cat, members, onClose, onApprove, onReject, approvingId, rejectingId }) {
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-6" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-amber-500" />
+            Duyệt thành viên — {cat.icon} {cat.name}
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">
+          {members.length === 0 ? (
+            <div className="text-center py-16 text-sm text-slate-400">
+              <UserCheck className="h-10 w-10 mx-auto mb-3 text-slate-200" />
+              Không có ai đang chờ duyệt vào nhóm này
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {members.map((u) => (
+                <div key={u.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-3 hover:bg-slate-50">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                      {(u.name || '?')[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-700 truncate">{u.name || '(Chưa quan tâm OA)'}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">{u.id}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => onApprove(u)}
+                      disabled={approvingId === u.id || rejectingId === u.id}
+                      className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                    >
+                      {approvingId === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Duyệt
+                    </button>
+                    <button
+                      onClick={() => onReject(u)}
+                      disabled={approvingId === u.id || rejectingId === u.id}
+                      className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600 transition-colors disabled:opacity-50"
+                    >
+                      {rejectingId === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                      Từ chối
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
 
 function Avatar({ name, avatar, size = 8 }) {
   const initial = (name || '?')[0].toUpperCase()
@@ -29,11 +94,44 @@ function CategoryMemberPanel({ cat, followers, onDelete }) {
   const [open, setOpen] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [search, setSearch] = useState('')
+  const [showPending, setShowPending] = useState(false)
+  const [approvingId, setApprovingId] = useState(null)
+  const [rejectingId, setRejectingId] = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['zalo-members', cat.group_id],
     queryFn: () => api.get(`/api/broadcast/groups/${cat.group_id}/members`).then((r) => r.data),
     enabled: open,
+  })
+
+  const { data: pendingData } = useQuery({
+    queryKey: ['zalo-pending', cat.group_id],
+    queryFn: () => api.get(`/api/broadcast/groups/${cat.group_id}/pending`).then((r) => r.data),
+    refetchInterval: 30000,
+  })
+  const pendingMembers = pendingData?.members ?? []
+
+  const approveMutation = useMutation({
+    mutationFn: (user) =>
+      api.post(`/api/broadcast/groups/${cat.group_id}/pending/approve`, { users: [user] }).then((r) => r.data),
+    onSuccess: (_, user) => {
+      toast.success(`Đã duyệt ${user.name || user.id}`)
+      setApprovingId(null)
+      queryClient.invalidateQueries({ queryKey: ['zalo-pending', cat.group_id] })
+      queryClient.invalidateQueries({ queryKey: ['zalo-members', cat.group_id] })
+    },
+    onError: (e) => { toast.error(e.response?.data?.error || 'Lỗi duyệt'); setApprovingId(null) },
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: (user) =>
+      api.post(`/api/broadcast/groups/${cat.group_id}/pending/reject`, { userIds: [user.id] }).then((r) => r.data),
+    onSuccess: (_, user) => {
+      toast.success(`Đã từ chối ${user.name || user.id}`)
+      setRejectingId(null)
+      queryClient.invalidateQueries({ queryKey: ['zalo-pending', cat.group_id] })
+    },
+    onError: (e) => { toast.error(e.response?.data?.error || 'Lỗi từ chối'); setRejectingId(null) },
   })
 
   const addMutation = useMutation({
@@ -113,6 +211,14 @@ function CategoryMemberPanel({ cat, followers, onDelete }) {
             </button>
             <button
               type="button"
+              onClick={(e) => { e.stopPropagation(); setShowPending(true) }}
+              className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition-colors ${pendingMembers.length > 0 ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+            >
+              <UserCheck className="h-3 w-3" />
+              Duyệt{pendingMembers.length > 0 ? ` (${pendingMembers.length})` : ''}
+            </button>
+            <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 if (window.confirm(`Xóa nhóm "${cat.name}"? Toàn bộ ${members.length} thành viên cũng sẽ bị xóa.`)) {
@@ -128,6 +234,18 @@ function CategoryMemberPanel({ cat, followers, onDelete }) {
           </div>
         </button>
       </CardHeader>
+
+      {showPending && (
+        <PendingMembersModal
+          cat={cat}
+          members={pendingMembers}
+          onClose={() => setShowPending(false)}
+          onApprove={(u) => { setApprovingId(u.id); approveMutation.mutate(u) }}
+          onReject={(u) => { setRejectingId(u.id); rejectMutation.mutate(u) }}
+          approvingId={approvingId}
+          rejectingId={rejectingId}
+        />
+      )}
 
       {open && (
         <CardContent className="pt-4 space-y-3">
