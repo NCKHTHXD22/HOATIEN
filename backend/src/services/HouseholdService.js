@@ -285,8 +285,9 @@ async function commitImport(parsed, villageId, performedBy) {
     if (m.cccd) byCccd.set(m.cccd, m);
     byNd.set(ndKey(m.hoTen, m.ngaySinh, m.household?.to || to), m);
   }
+  // Chỉ đối chiếu với DB CÓ SẴN lúc bắt đầu (không cập nhật map trong lúc import) —
+  // để 2 hộ KHÁC NHAU trong cùng file (kể cả trùng tên+ngày sinh+tổ) không bị gộp vào nhau.
   const findExisting = (m) => (m.cccd && byCccd.get(m.cccd)) || byNd.get(ndKey(m.hoTen, m.ngaySinh, to)) || null;
-  const remember = (m) => { if (m.cccd) byCccd.set(m.cccd, m); byNd.set(ndKey(m.hoTen, m.ngaySinh, to), m); };
 
   // Gộp cập nhật: chỉ ghi đè bằng giá trị KHÔNG rỗng của file (không xóa dữ liệu cũ bằng ô trống)
   const buildUpdate = (ex, m) => {
@@ -326,8 +327,8 @@ async function commitImport(parsed, villageId, performedBy) {
           const ex = findExisting(m);
           if (ex) { await applyExisting(tx, ex, m); touched.add(ex.householdId); }
           else {
-            const c = await tx.member.create({ data: { ...mkMember(m, false), householdId: hhId }, select: { id: true, cccd: true, hoTen: true, ngaySinh: true, householdId: true } });
-            remember(c); stats.added++; touched.add(hhId);
+            await tx.member.create({ data: { ...mkMember(m, false), householdId: hhId } });
+            stats.added++; touched.add(hhId);
           }
         }
       } else {
@@ -342,9 +343,8 @@ async function commitImport(parsed, villageId, performedBy) {
           seq += 1;
           const hh = await tx.household.create({
             data: { soHoKhau: `${prefix}-${pad3(seq)}`, diaChi, to: to || null, villageId: village.id, soNhanKhau: toCreate.length, members: { create: toCreate } },
-            select: { id: true, members: { select: { id: true, cccd: true, hoTen: true, ngaySinh: true, householdId: true } } },
+            select: { id: true },
           });
-          hh.members.forEach(remember);
           stats.newHouseholds++; stats.added += toCreate.length; touched.add(hh.id);
         }
       }
