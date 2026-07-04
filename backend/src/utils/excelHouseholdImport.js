@@ -7,6 +7,8 @@ const pad3 = (n) => String(n).padStart(3, "0");
 const deaccent = (s) =>
   String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
 const norm = (s) => deaccent(s).toLowerCase().trim();
+// Dòng chủ hộ: quan hệ "Chủ" hoặc "Chủ hộ" (so khớp CÓ DẤU để không lẫn "Chú" = chú/cậu)
+const isHead = (rel) => { const q = String(rel || "").normalize("NFC").toLowerCase().trim(); return q === "chủ" || q.startsWith("chủ h"); };
 
 // Lấy giá trị text từ 1 cell (xử lý richText / hyperlink / formula / Date)
 function cellStr(cell) {
@@ -121,12 +123,18 @@ async function parseHouseholdExcel(buffer) {
     const row = ws.getRow(r);
     const name = cellStr(row.getCell(C.hoTen));
     if (!name || isHeaderish(name)) continue; // bỏ tiêu đề, dòng đánh số, dòng trống
-    if (/tong cong|tổng cộng/i.test(norm(name))) break;
-
-    const hoStt = cellStr(row.getCell(C.hoStt));
-    if (String(hoStt).trim() || !cur) { cur = { stt: String(hoStt).trim(), to: "", members: [] }; households.push(cur); }
+    // Dừng khi tới phần thống kê/tổng hợp cuối bảng
+    if (/tong cong|tong hop|tong so|bang tong/.test(norm(name))) break;
 
     const quanHe = cellStr(row.getCell(C.quanHe));
+    const hoStt = cellStr(row.getCell(C.hoStt));
+    const head = isHead(quanHe);
+    // Hộ mới khi: có số thứ tự ở cột "Hộ", HOẶC gặp dòng chủ hộ mới (kể cả khi bị bỏ trống số)
+    if (String(hoStt).trim() || (head && cur && cur.members.length) || !cur) {
+      cur = { stt: String(hoStt).trim(), to: "", members: [] };
+      households.push(cur);
+    }
+
     const to = cellStr(row.getCell(C.to));
     if (to && !cur.to) cur.to = to;
     if (to && !toGuess) toGuess = to;
@@ -148,7 +156,7 @@ async function parseHouseholdExcel(buffer) {
       gioiTinh,
       cccd,
       quanHeChuHo: quanHe || NO_INFO,
-      laChuHo: /^chu ho$/.test(norm(quanHe)),
+      laChuHo: head,
       sdt: cellStr(row.getCell(C.sdt)) || null,
     });
   }
