@@ -33,13 +33,15 @@ router.get("/", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/households/search?q=
+// GET /api/households/search?q=&chuHo=1
 router.get("/search", async (req, res, next) => {
   try {
-    const { q } = req.query;
+    const { q, chuHo } = req.query;
     if (!q) return fail(res, "Thiếu từ khóa tìm kiếm");
-    const ids = await SearchService.searchByText(q);
+    const ids = await SearchService.searchByText(q, { chuHo: chuHo === "1" || chuHo === "true" });
     const households = ids.length ? await HouseholdRepo.findByIds(ids) : [];
+    const order = new Map(ids.map((id, i) => [id, i]));
+    households.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)); // giữ thứ tự xếp hạng
     ok(res, households);
   } catch (err) { next(err); }
 });

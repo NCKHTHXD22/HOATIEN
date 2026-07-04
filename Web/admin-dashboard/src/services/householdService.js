@@ -3,8 +3,8 @@ import api from './api'
 export const getAll = (params = {}) =>
   api.get('/households', { params })
 
-export const search = (q) =>
-  api.get('/households/search', { params: { q } })
+export const search = (q, chuHo = false) =>
+  api.get('/households/search', { params: { q, ...(chuHo && { chuHo: 1 }) } })
 
 export const getToList = (villageId) =>
   api.get('/households/to-list', { params: { villageId } })

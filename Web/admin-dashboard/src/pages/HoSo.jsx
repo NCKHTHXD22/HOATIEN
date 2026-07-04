@@ -31,7 +31,8 @@ const TAB_FILTER = {
   'Tạm trú':    { loaiHo: 'TAM_TRU' },
   'Tạm vắng':  { loaiHo: 'TAM_VANG' },
 }
-const COLUMNS    = ['Số HK', 'Địa chỉ', 'Thôn', 'Tổ', 'Loại hộ', 'Nhân khẩu', 'Trạng thái', '']
+const COLUMNS    = ['Số HK', 'Chủ hộ', 'Địa chỉ', 'Thôn', 'Tổ', 'Loại hộ', 'Nhân khẩu', 'Trạng thái', '']
+const chuHoName  = h => h.members?.find(m => m.laChuHo)?.hoTen || h.members?.[0]?.hoTen || '—'
 const EMPTY_HH   = { soHoKhau: '', diaChi: '', to: '', villageId: '', loaiHo: 'THUONG_TRU', trangThai: 'ACTIVE' }
 const EMPTY_MEM  = { hoTen: '', ngaySinh: '', gioiTinh: 'NAM', cccd: '', sdt: '', quanHeChuHo: '', laChuHo: false }
 const NO_INFO    = 'Không có thông tin'
@@ -41,6 +42,7 @@ const GENDER_LABEL = { NAM: 'Nam', NU: 'Nữ', KHAC: 'Khác' }
 export default function HoSo() {
   const [tab, setTab]           = useState('Tất cả')
   const [search, setSearch]     = useState('')
+  const [searchChuHo, setSearchChuHo] = useState(false)
   const [page, setPage]         = useState(1)
   const [households, setHH]     = useState([])
   const [pagination, setPag]    = useState({ total: 0, totalPages: 1 })
@@ -126,12 +128,12 @@ export default function HoSo() {
     } catch { /* ignore */ }
   }, [])
 
-  const loadList = useCallback(async (t, s, p, vId, toVal) => {
+  const loadList = useCallback(async (t, s, p, vId, toVal, chuHo = false) => {
     setLoading(true)
     try {
       let res
       if (s.trim()) {
-        res = await householdService.search(s.trim())
+        res = await householdService.search(s.trim(), chuHo)
         setHH(res.data.data || [])
         setPag({ total: res.data.data?.length ?? 0, totalPages: 1 })
       } else {
@@ -154,7 +156,7 @@ export default function HoSo() {
 
   useEffect(() => { loadStats() }, [loadStats])
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadList(tab, search, page, villageFilter, toFilter) }, [tab, page, villageFilter, toFilter])
+  useEffect(() => { loadList(tab, search, page, villageFilter, toFilter, searchChuHo) }, [tab, page, villageFilter, toFilter])
   useEffect(() => { loadVillages() }, [loadVillages])
   useEffect(() => {
     householdService.getToList(villageFilter || undefined)
@@ -165,7 +167,12 @@ export default function HoSo() {
   const handleSearch = v => {
     setSearch(v)
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => { setPage(1); loadList(tab, v, 1, villageFilter, toFilter) }, 400)
+    debounce.current = setTimeout(() => { setPage(1); loadList(tab, v, 1, villageFilter, toFilter, searchChuHo) }, 250)
+  }
+  const toggleSearchChuHo = () => {
+    const next = !searchChuHo
+    setSearchChuHo(next)
+    if (search.trim()) { setPage(1); loadList(tab, search, 1, villageFilter, toFilter, next) }
   }
   const handleVillageFilter = v => { setVillageFilter(v); setToFilter(''); setPage(1) }
   const handleToFilter = v => { setToFilter(v); setPage(1) }
@@ -400,7 +407,11 @@ export default function HoSo() {
               <option value="">Tất cả tổ</option>
               {toOptions.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <SearchInput value={search} onChange={handleSearch} placeholder="Tìm số HK, địa chỉ..." />
+            <SearchInput value={search} onChange={handleSearch} placeholder="Tìm chủ hộ, số HK, SĐT, CCCD, địa chỉ..." />
+            <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer whitespace-nowrap select-none">
+              <input type="checkbox" checked={searchChuHo} onChange={toggleSearchChuHo} className="rounded" />
+              Chỉ chủ hộ
+            </label>
           </div>
         </div>
 
@@ -413,6 +424,7 @@ export default function HoSo() {
             return (
               <tr key={h.id} className="border-b border-border hover:bg-secondary/50 transition-colors">
                 <td className="px-5 py-3 font-mono text-xs font-semibold text-foreground">{h.soHoKhau}</td>
+                <td className="px-5 py-3 text-sm font-medium text-foreground max-w-[160px] truncate">{chuHoName(h)}</td>
                 <td className="px-5 py-3 text-sm text-foreground max-w-[200px] truncate">{h.diaChi}</td>
                 <td className="px-5 py-3 text-sm text-muted-foreground">{h.village?.ten ?? '—'}</td>
                 <td className="px-5 py-3 text-sm text-muted-foreground">{h.to ?? '—'}</td>
