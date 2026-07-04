@@ -129,8 +129,9 @@ async function parseHouseholdExcel(buffer) {
     const quanHe = cellStr(row.getCell(C.quanHe));
     const hoStt = cellStr(row.getCell(C.hoStt));
     const head = isHead(quanHe);
-    // Hộ mới khi: có số thứ tự ở cột "Hộ", HOẶC gặp dòng chủ hộ mới (kể cả khi bị bỏ trống số)
-    if (String(hoStt).trim() || (head && cur && cur.members.length) || !cur) {
+    // Hộ mới = có số thứ tự ở cột "Hộ". (Chủ hộ có thể nằm ở BẤT KỲ dòng nào trong hộ,
+    // vì file đặt số ở người liệt kê đầu tiên — không nhất thiết là chủ hộ.)
+    if (String(hoStt).trim() || !cur) {
       cur = { stt: String(hoStt).trim(), to: "", members: [] };
       households.push(cur);
     }
