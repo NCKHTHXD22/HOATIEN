@@ -30,6 +30,19 @@ router.post("/webhook", async (req, res) => {
       return res.status(200).json({ error: 0 });
     }
 
+    // Có người xin vào nhóm Zalo (GMF) → tự động duyệt nếu nhóm đó đã bật "Tự động duyệt"
+    const GROUP_JOIN_REQUEST_EVENTS = ["user_request_join_group", "react_request_join_group"];
+    if (GROUP_JOIN_REQUEST_EVENTS.includes(req.body.event_name)) {
+      const groupId = req.body.group_id || req.body.group?.id;
+      const rawUsers = req.body.users || [];
+      if (groupId && rawUsers.length) {
+        require("../services/zaloGroupJoin")
+          .autoApproveIfEnabled(groupId, rawUsers)
+          .catch((e) => logger.error(`autoApproveIfEnabled: ${e.message}`));
+      }
+      return res.status(200).json({ error: 0 });
+    }
+
     // Ảnh / video người dùng gửi (dùng cho bước đính kèm của luồng phản ánh)
     if (req.body.event_name === "user_send_image" || req.body.event_name === "user_send_video" || message?.attachments?.length) {
       const feedbackChat = require("../services/feedbackChat");

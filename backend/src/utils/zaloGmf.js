@@ -59,21 +59,36 @@ async function deleteZaloGroup(groupId) {
 // Danh sách người đang chờ duyệt vào nhóm (GMF v3.0)
 async function getPendingGroupMembers(groupId, offset = 0, count = 50) {
   const data = await _get("https://openapi.zalo.me/v3.0/oa/group/listpendinginvite", { group_id: String(groupId), offset, count });
-  return { members: data?.data?.members || [], total: data?.data?.total || 0, raw: data };
+  if (data?.error !== 0) throw new Error(`Zalo error ${data?.error}: ${data?.message}`);
+  return { members: data?.data?.members || [], total: data?.data?.total || 0 };
 }
 
-// Duyệt người đang chờ vào nhóm (GMF v3.0)
+// Duyệt thành viên đang chờ vào nhóm (GMF v3.0)
 async function acceptGroupJoinRequest(groupId, memberUserIds) {
-  const data = await _post("https://openapi.zalo.me/v3.0/oa/group/acceptpendinginvite", { group_id: String(groupId), member_user_ids: memberUserIds.map(String) });
+  const data = await _post("https://openapi.zalo.me/v3.0/oa/group/acceptpendinginvite", {
+    group_id: String(groupId),
+    member_user_ids: memberUserIds.map(String),
+  });
   if (data?.error !== 0) throw new Error(`Zalo error ${data?.error}: ${data?.message}`);
   return true;
 }
 
-// Từ chối người đang chờ vào nhóm (GMF v3.0)
+// Từ chối thành viên đang chờ vào nhóm (GMF v3.0)
 async function rejectGroupJoinRequest(groupId, memberUserIds) {
-  const data = await _post("https://openapi.zalo.me/v3.0/oa/group/rejectpendinginvite", { group_id: String(groupId), member_user_ids: memberUserIds.map(String) });
+  const data = await _post("https://openapi.zalo.me/v3.0/oa/group/rejectpendinginvite", {
+    group_id: String(groupId),
+    member_user_ids: memberUserIds.map(String),
+  });
   if (data?.error !== 0) throw new Error(`Zalo error ${data?.error}: ${data?.message}`);
   return true;
 }
 
-module.exports = { getGroupsOfOA, getGroupMembersV3, createZaloGroup, deleteZaloGroup, getPendingGroupMembers, acceptGroupJoinRequest, rejectGroupJoinRequest };
+module.exports = {
+  getGroupsOfOA,
+  getGroupMembersV3,
+  createZaloGroup,
+  deleteZaloGroup,
+  getPendingGroupMembers,
+  acceptGroupJoinRequest,
+  rejectGroupJoinRequest,
+};

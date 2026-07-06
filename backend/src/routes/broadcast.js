@@ -45,7 +45,17 @@ async function listGroups() {
   const docs = await ZaloGroup.find().sort({ name: 1 }).lean();
   const counts = await ZaloGroupMember.aggregate([{ $group: { _id: "$groupId", n: { $sum: 1 } } }]);
   const cmap = Object.fromEntries(counts.map((c) => [c._id, c.n]));
-  return docs.map((g) => ({ id: String(g._id), group_id: g.groupId, name: g.name, icon: g.icon || "📋", memberCount: cmap[g.groupId] || 0 }));
+  return docs.map((g) => ({ id: String(g._id), group_id: g.groupId, name: g.name, icon: g.icon || "📋", memberCount: cmap[g.groupId] || 0, autoApprove: g.autoApprove || false }));
+}
+
+// Zalo có thể trả về string id hoặc object cho 1 người đang chờ duyệt — chuẩn hóa lại
+function normalizePendingMember(m) {
+  if (typeof m === "string") return { id: m, name: "", avatar: "" };
+  return {
+    id: String(m.id || m.user_id || m.uid || ""),
+    name: m.name || m.display_name || m.user_name || "",
+    avatar: m.avatar || m.avatar_url || "",
+  };
 }
 
 router.get("/groups", async (req, res, next) => {
@@ -163,20 +173,11 @@ router.post("/groups/:groupId/members/sync", async (req, res, next) => {
 });
 
 // ── Duyệt thành viên chờ vào nhóm (GMF pending invite) ─────────────
-const _normalizePending = (m) =>
-  typeof m === "string"
-    ? { id: m, name: "", avatar: "" }
-    : {
-        id: String(m.id || m.user_id || m.uid || ""),
-        name: m.name || m.display_name || m.user_name || "",
-        avatar: m.avatar || m.avatar_url || "",
-      };
-
 // Danh sách người đang chờ duyệt vào nhóm
 router.get("/groups/:groupId/pending", async (req, res, next) => {
   try {
     const { members, total } = await zaloGmf.getPendingGroupMembers(req.params.groupId);
-    res.json({ total, members: members.map(_normalizePending) });
+    res.json({ total, members: members.map(normalizePendingMember) });
   } catch (err) { next(err); }
 });
 
@@ -208,6 +209,14 @@ router.post("/groups/:groupId/pending/reject", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Bật/tắt tự động duyệt thành viên xin vào nhóm này
+router.patch("/groups/:groupId/auto-approve", async (req, res, next) => {
+  try {
+    const { autoApprove } = req.body;
+    await ZaloGroup.findOneAndUpdate({ groupId: req.params.groupId }, { $set: { autoApprove: !!autoApprove } });
+    ok(res, { ok: true, groups: await listGroups() });
+  } catch (err) { next(err); }
+});
 // ── Upload ảnh -> Zalo attachment_id ───────────────────────────────
 function makeUpload(filenamePrefix, opts) {
   const storage = multer.diskStorage({
