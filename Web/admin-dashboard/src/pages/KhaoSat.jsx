@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  ClipboardList, Plus, Trash2, RefreshCw, X, Lock,
+  ClipboardList, Plus, Trash2, RefreshCw, X, Lock, Pencil,
   PlusCircle, MinusCircle, BarChart3, Send, Copy, Search,
 } from 'lucide-react'
-import { getSurveys, createSurvey, deleteSurvey, closeSurvey, getSurveyResults } from '../services/notificationService'
+import { getSurveys, createSurvey, getSurvey, updateSurvey, deleteSurvey, closeSurvey, getSurveyResults } from '../services/notificationService'
 import { api } from '../lib/api'
 
 function fmtDate(d) {
@@ -20,21 +20,45 @@ function getSurveyStatus(s) {
 
 const QTYPE_LABEL = { SINGLE: 'Một lựa chọn', MULTIPLE: 'Nhiều lựa chọn', TEXT: 'Văn bản tự do' }
 
-// ── Modal tạo khảo sát ─────────────────────────────────────
-function CreateSurveyModal({ open, onClose, onDone }) {
+function toDatetimeLocal(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// ── Modal tạo / sửa khảo sát ────────────────────────────────
+function SurveyFormModal({ open, onClose, onDone, survey }) {
+  const isEdit = !!survey
   const [tieuDe, setTieuDe] = useState('')
   const [deadline, setDeadline] = useState('')
   const [questions, setQuestions] = useState([
     { cauHoi: '', loai: 'SINGLE', luaChon: ['', ''] },
   ])
   const [loading, setLoading] = useState(false)
+  const [loadingSurvey, setLoadingSurvey] = useState(false)
 
   useEffect(() => {
-    if (open) {
+    if (!open) return
+    if (isEdit) {
+      setLoadingSurvey(true)
+      getSurvey(survey.id).then(r => {
+        const s = r.data
+        setTieuDe(s.tieuDe || '')
+        setDeadline(toDatetimeLocal(s.deadline))
+        setQuestions(
+          (s.questions || []).map(q => ({
+            cauHoi: q.cauHoi,
+            loai: q.loai || 'SINGLE',
+            luaChon: q.luaChon?.length ? q.luaChon : ['', ''],
+          }))
+        )
+      }).finally(() => setLoadingSurvey(false))
+    } else {
       setTieuDe(''); setDeadline('')
       setQuestions([{ cauHoi: '', loai: 'SINGLE', luaChon: ['', ''] }])
     }
-  }, [open])
+  }, [open, isEdit, survey])
 
   const addQuestion = () =>
     setQuestions(q => [...q, { cauHoi: '', loai: 'SINGLE', luaChon: ['', ''] }])
@@ -63,14 +87,16 @@ function CreateSurveyModal({ open, onClose, onDone }) {
     if (questions.some(q => !q.cauHoi.trim())) return alert('Nhập nội dung cho tất cả câu hỏi')
     setLoading(true)
     try {
-      await createSurvey({
+      const payload = {
         tieuDe,
         deadline: deadline || null,
         questions: questions.map(q => ({
           ...q,
           luaChon: q.loai !== 'TEXT' ? q.luaChon.filter(c => c.trim()) : [],
         })),
-      })
+      }
+      if (isEdit) await updateSurvey(survey.id, payload)
+      else await createSurvey(payload)
       onDone(); onClose()
     } catch (err) {
       alert(err.response?.data?.message || 'Có lỗi xảy ra')
@@ -82,9 +108,14 @@ function CreateSurveyModal({ open, onClose, onDone }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-base font-semibold">Tạo khảo sát nhanh</h2>
+          <h2 className="text-base font-semibold">{isEdit ? 'Sửa khảo sát' : 'Tạo khảo sát nhanh'}</h2>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100"><X size={18} /></button>
         </div>
+        {loadingSurvey ? (
+          <div className="flex-1 flex items-center justify-center py-16 text-gray-400">
+            <RefreshCw size={20} className="animate-spin" />
+          </div>
+        ) : (
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề khảo sát <span className="text-red-500">*</span></label>
@@ -167,11 +198,12 @@ function CreateSurveyModal({ open, onClose, onDone }) {
             ))}
           </div>
         </div>
+        )}
         <div className="px-6 py-4 border-t flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
-          <button onClick={handleSave} disabled={loading}
+          <button onClick={handleSave} disabled={loading || loadingSurvey}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
-            {loading && <RefreshCw size={13} className="animate-spin" />} Tạo khảo sát
+            {loading && <RefreshCw size={13} className="animate-spin" />} {isEdit ? 'Lưu thay đổi' : 'Tạo khảo sát'}
           </button>
         </div>
       </div>
@@ -257,16 +289,19 @@ function ResultsModal({ surveyId, open, onClose }) {
 // ── Modal gửi link khảo sát qua Zalo ───────────────────────
 function SendZaloModal({ survey, open, onClose }) {
   const [followers, setFollowers] = useState([])
+  const [groups, setGroups] = useState([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState([])
+  const [selectedGroups, setSelectedGroups] = useState([])
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState('')
   const link = survey ? `${window.location.origin}/ks/${survey.id}` : ''
 
   useEffect(() => {
     if (!open) return
-    setSelected([]); setResult(''); setSearch('')
+    setSelected([]); setSelectedGroups([]); setResult(''); setSearch('')
     api.get('/api/broadcast/followers').then(r => setFollowers(r.data?.followers || [])).catch(() => {})
+    api.get('/api/broadcast/groups').then(r => setGroups(r.data?.groups || [])).catch(() => {})
   }, [open])
 
   if (!open) return null
@@ -275,14 +310,17 @@ function SendZaloModal({ survey, open, onClose }) {
     return !q || (f.display_name || '').toLowerCase().includes(q) || (f.user_id || '').includes(q)
   })
   const toggle = id => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  const toggleGroup = id => setSelectedGroups(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  const selectAllFiltered = () => setSelected(p => Array.from(new Set([...p, ...filtered.map(f => f.user_id)])))
 
   const send = async () => {
-    if (selected.length === 0) return alert('Chọn ít nhất 1 người nhận')
+    if (selected.length === 0 && selectedGroups.length === 0) return alert('Chọn ít nhất 1 người nhận hoặc nhóm')
     setSending(true)
     try {
       const message = `📋 Khảo sát: ${survey.tieuDe}\n\nMời bạn tham gia trả lời: ${link}`
-      await api.post('/api/broadcast/send', { userIds: selected, message })
-      setResult(`Đã gửi link khảo sát tới ${selected.length} người (đang xử lý nền).`)
+      const userIds = [...selected, ...selectedGroups.map(id => `g:${id}`)]
+      await api.post('/api/broadcast/send', { userIds, message })
+      setResult(`Đã gửi link khảo sát tới ${selected.length} người và ${selectedGroups.length} nhóm (đang xử lý nền).`)
     } catch (e) { alert(e.response?.data?.error || 'Lỗi gửi') }
     finally { setSending(false) }
   }
@@ -302,17 +340,38 @@ function SendZaloModal({ survey, open, onClose }) {
               className="flex items-center gap-1 text-xs px-2 py-1 border rounded hover:bg-gray-50"><Copy size={12} /> Chép</button>
           </div>
         </div>
+        {groups.length > 0 && (
+          <div className="px-6 py-3 border-b">
+            <p className="text-xs font-medium text-gray-500 mb-2">Gửi theo nhóm Zalo</p>
+            <div className="flex flex-wrap gap-1.5">
+              {groups.map(g => (
+                <label key={g.group_id}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border cursor-pointer transition-colors ${selectedGroups.includes(g.group_id) ? 'bg-green-600 text-white border-green-600' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}>
+                  <input type="checkbox" className="hidden" checked={selectedGroups.includes(g.group_id)} onChange={() => toggleGroup(g.group_id)} />
+                  <span>{g.icon} {g.name}</span>
+                  <span className="opacity-70">({g.memberCount})</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="px-6 py-3 border-b">
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-2.5 text-gray-400" />
-            <input className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="Tìm follower..." value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-3 top-2.5 text-gray-400" />
+              <input className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder="Tìm follower..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <button onClick={selectAllFiltered} disabled={filtered.length === 0}
+              className="shrink-0 px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed">
+              Chọn tất cả
+            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto divide-y">
           {filtered.length === 0
             ? <p className="text-center text-sm text-gray-400 py-6">Chưa có follower (đồng bộ ở tab Gửi tin Zalo)</p>
-            : filtered.slice(0, 100).map(f => (
+            : filtered.map(f => (
               <label key={f.user_id} className="flex items-center gap-3 px-6 py-2.5 hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" checked={selected.includes(f.user_id)} onChange={() => toggle(f.user_id)} className="rounded" />
                 <span className="text-sm flex-1 truncate">{f.display_name || '(Chưa có tên)'}</span>
@@ -321,7 +380,7 @@ function SendZaloModal({ survey, open, onClose }) {
           }
         </div>
         <div className="px-6 py-3 border-t flex items-center justify-between">
-          <span className="text-xs text-gray-500">{result || `Đã chọn ${selected.length} người`}</span>
+          <span className="text-xs text-gray-500">{result || `Đã chọn ${selected.length} người, ${selectedGroups.length} nhóm`}</span>
           <button onClick={send} disabled={sending}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
             {sending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} Gửi link
@@ -337,6 +396,7 @@ export default function KhaoSat() {
   const [surveys, setSurveys] = useState([])
   const [loading, setLoading] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [editSurvey, setEditSurvey] = useState(null)
   const [resultsModal, setResultsModal] = useState(null)
   const [sendModal, setSendModal] = useState(null)
 
@@ -420,6 +480,13 @@ export default function KhaoSat() {
                   >
                     <Send size={13} /> Gửi Zalo
                   </button>
+                  <button
+                    onClick={() => setEditSurvey(s)}
+                    title="Sửa khảo sát"
+                    className="p-1.5 rounded-lg text-slate-500 bg-slate-100 hover:bg-slate-200 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200"
+                  >
+                    <Pencil size={14} />
+                  </button>
                   {s.isActive && (
                     <button
                       onClick={() => handleClose(s.id)}
@@ -442,7 +509,8 @@ export default function KhaoSat() {
         }
       </div>
 
-      <CreateSurveyModal open={createOpen} onClose={() => setCreateOpen(false)} onDone={load} />
+      <SurveyFormModal open={createOpen} onClose={() => setCreateOpen(false)} onDone={load} />
+      <SurveyFormModal open={!!editSurvey} survey={editSurvey} onClose={() => setEditSurvey(null)} onDone={load} />
       <ResultsModal surveyId={resultsModal} open={!!resultsModal} onClose={() => setResultsModal(null)} />
       <SendZaloModal survey={sendModal} open={!!sendModal} onClose={() => setSendModal(null)} />
     </div>

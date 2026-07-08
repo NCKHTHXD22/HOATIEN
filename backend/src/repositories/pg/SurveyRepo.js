@@ -36,6 +36,28 @@ const create = async ({ tieuDe, notificationId, deadline, questions }) => {
   });
 };
 
+const update = async (id, { tieuDe, deadline, questions }) => {
+  return prisma.$transaction(async (tx) => {
+    await tx.surveyQuestion.deleteMany({ where: { surveyId: id } });
+    return tx.survey.update({
+      where: { id },
+      data: {
+        tieuDe,
+        deadline: deadline ? new Date(deadline) : null,
+        questions: {
+          create: questions.map((q, i) => ({
+            thuTu: i,
+            cauHoi: q.cauHoi,
+            loai: q.loai || "SINGLE",
+            luaChon: q.luaChon || [],
+          })),
+        },
+      },
+      include: { questions: { orderBy: { thuTu: "asc" } } },
+    });
+  });
+};
+
 const remove = (id) =>
   prisma.survey.delete({ where: { id } });
 
@@ -70,4 +92,4 @@ const getResults = async (surveyId) => {
   return { survey, totalResponses: responses.length, summary };
 };
 
-module.exports = { findAll, findById, create, remove, close, addResponse, getResponses, getResults };
+module.exports = { findAll, findById, create, update, remove, close, addResponse, getResponses, getResults };

@@ -82,6 +82,12 @@ export const getSurveys = () =>
 export const createSurvey = (data) =>
   api.post('/notify/surveys', data).then(r => r.data)
 
+export const getSurvey = (id) =>
+  api.get(`/notify/surveys/${id}`).then(r => r.data)
+
+export const updateSurvey = (id, data) =>
+  api.put(`/notify/surveys/${id}`, data).then(r => r.data)
+
 export const getSurveyResults = (id) =>
   api.get(`/notify/surveys/${id}/results`).then(r => r.data)
 

@@ -16,6 +16,7 @@ const ScheduledBroadcast = require("../models/mongo/ScheduledBroadcast");
 const { sendToUsers, getJob } = require("../services/broadcastService");
 const { uploadImageToZalo, uploadFileToZalo } = require("../utils/zaloBroadcast");
 const env = require("../config/env");
+const { prisma } = require("../config/database");
 
 const UPLOAD_DIR = path.join(__dirname, "../../uploads");
 const PUBLIC_BASE = (env.CORS_ORIGINS || []).join(",").includes("dxvtech") ? "https://api.dxvtech.vn" : "https://api.dxvtech.vn";
@@ -29,6 +30,29 @@ router.get("/followers", async (req, res, next) => {
     const list = await ZaloFollowerRepo.findAll();
     const followers = list.map((f) => ({ user_id: f.userId, display_name: f.displayName || "", avatar: f.avatar || "", linkedMemberId: f.linkedMemberId || null }));
     ok(res, { followers, count: followers.length, syncing: ZaloService.isSyncing(), syncedAt: null });
+  } catch (err) { next(err); }
+});
+
+// Follower đã theo dõi OA và thuộc 1 thôn cụ thể (khớp qua Member.zaloUserId)
+router.get("/followers/by-village/:villageId", async (req, res, next) => {
+  try {
+    const { villageId } = req.params;
+    if (req.user.role === "ADMIN_VILLAGE" && req.user.villageIds?.length && !req.user.villageIds.includes(villageId)) {
+      return fail(res, "Không có quyền trên thôn này", 403);
+    }
+    const [totalMembers, membersWithZalo] = await Promise.all([
+      prisma.member.count({ where: { trangThai: "ACTIVE", household: { villageId } } }),
+      prisma.member.findMany({
+        where: { trangThai: "ACTIVE", zaloUserId: { not: null }, household: { villageId } },
+        select: { zaloUserId: true },
+      }),
+    ]);
+    const zaloIds = new Set(membersWithZalo.map((m) => m.zaloUserId));
+    const list = await ZaloFollowerRepo.findAll();
+    const followers = list
+      .filter((f) => zaloIds.has(f.userId))
+      .map((f) => ({ user_id: f.userId, display_name: f.displayName || "", avatar: f.avatar || "", linkedMemberId: f.linkedMemberId || null }));
+    ok(res, { followers, totalMembers, matchedCount: followers.length });
   } catch (err) { next(err); }
 });
 

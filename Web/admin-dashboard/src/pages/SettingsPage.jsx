@@ -6,70 +6,6 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 
-function PendingMembersModal({ cat, members, onClose, onApprove, onReject, approvingId, rejectingId }) {
-  return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-6" onClick={onClose}>
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
-          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <UserCheck className="h-4 w-4 text-amber-500" />
-            Duyệt thành viên — {cat.icon} {cat.name}
-          </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5">
-          {members.length === 0 ? (
-            <div className="text-center py-16 text-sm text-slate-400">
-              <UserCheck className="h-10 w-10 mx-auto mb-3 text-slate-200" />
-              Không có ai đang chờ duyệt vào nhóm này
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {members.map((u) => (
-                <div key={u.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-3 hover:bg-slate-50">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-sm font-bold shrink-0">
-                      {(u.name || '?')[0].toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{u.name || '(Chưa quan tâm OA)'}</p>
-                      <p className="text-[11px] text-slate-400 font-mono">{u.id}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={() => onApprove(u)}
-                      disabled={approvingId === u.id || rejectingId === u.id}
-                      className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors disabled:opacity-50"
-                    >
-                      {approvingId === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                      Duyệt
-                    </button>
-                    <button
-                      onClick={() => onReject(u)}
-                      disabled={approvingId === u.id || rejectingId === u.id}
-                      className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-600 transition-colors disabled:opacity-50"
-                    >
-                      {rejectingId === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                      Từ chối
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body
-  )
-}
-
 function Avatar({ name, avatar, size = 8 }) {
   const initial = (name || '?')[0].toUpperCase()
   if (avatar) {
@@ -171,12 +107,14 @@ function PendingMembersModal({ cat, members, onClose, onApprove, onReject, appro
   )
 }
 
-function GroupCard({ cat, followers, onDelete }) {
+function GroupCard({ cat, followers, villages, onDelete }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [search, setSearch] = useState('')
   const [showPending, setShowPending] = useState(false)
+  const [villageId, setVillageId] = useState('')
+  const [bulkAdding, setBulkAdding] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['zalo-members', cat.group_id],
@@ -264,6 +202,49 @@ function GroupCard({ cat, followers, onDelete }) {
       )
     })
   }, [followers, memberIds, search])
+
+  const bulkAddFollowers = async (list) => {
+    for (const f of list) {
+      await api.post(`/api/broadcast/groups/${cat.group_id}/members`, {
+        displayName: f.display_name || f.user_id,
+        zaloUserId: f.user_id,
+      })
+    }
+    queryClient.invalidateQueries({ queryKey: ['zalo-members', cat.group_id] })
+  }
+
+  const handleSelectAll = async () => {
+    if (filteredFollowers.length === 0 || bulkAdding) return
+    setBulkAdding(true)
+    try {
+      await bulkAddFollowers(filteredFollowers)
+      toast.success(`Đã thêm ${filteredFollowers.length} người vào nhóm`)
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Lỗi thêm thành viên')
+    } finally {
+      setBulkAdding(false)
+    }
+  }
+
+  const handleAddByVillage = async () => {
+    if (!villageId || bulkAdding) return
+    setBulkAdding(true)
+    try {
+      const r = await api.get(`/api/broadcast/followers/by-village/${villageId}`)
+      const { followers: vFollowers, totalMembers, matchedCount } = r.data
+      const toAdd = vFollowers.filter((f) => !memberIds.has(f.user_id))
+      if (toAdd.length === 0) {
+        toast.error('Không có follower mới nào trong thôn này để thêm')
+      } else {
+        await bulkAddFollowers(toAdd)
+        toast.success(`Đã thêm ${toAdd.length} người (${matchedCount}/${totalMembers} nhân khẩu trong thôn đã liên kết Zalo)`)
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Lỗi lấy danh sách theo thôn')
+    } finally {
+      setBulkAdding(false)
+    }
+  }
 
   return (
     <>
@@ -361,15 +342,46 @@ function GroupCard({ cat, followers, onDelete }) {
                   </button>
                 </div>
 
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder="Tìm theo tên hoặc ID..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full h-8 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
-                  />
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Tìm theo tên hoặc ID..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="w-full h-8 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    disabled={bulkAdding || filteredFollowers.length === 0}
+                    className="h-8 px-2.5 rounded-md bg-blue-100 text-blue-700 text-xs font-semibold hover:bg-blue-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    Chọn tất cả
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={villageId}
+                    onChange={(e) => setVillageId(e.target.value)}
+                    className="h-8 flex-1 min-w-0 rounded-md border border-slate-200 bg-white text-xs px-2 focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+                  >
+                    <option value="">— Thêm cả thôn —</option>
+                    {(villages || []).map((v) => (
+                      <option key={v.id} value={v.id}>{v.ten}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddByVillage}
+                    disabled={!villageId || bulkAdding}
+                    className="h-8 px-2.5 rounded-md bg-emerald-100 text-emerald-700 text-xs font-semibold hover:bg-emerald-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0 flex items-center gap-1"
+                  >
+                    {bulkAdding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Thêm cả thôn'}
+                  </button>
                 </div>
 
                 <div className="max-h-52 overflow-y-auto rounded-md border border-slate-200 bg-white divide-y divide-slate-50">
@@ -486,6 +498,12 @@ export default function SettingsPage() {
     queryFn: () => api.get('/api/broadcast/followers').then((r) => r.data),
   })
 
+  const { data: villagesData } = useQuery({
+    queryKey: ['villages-list'],
+    queryFn: () => api.get('/api/villages').then((r) => r.data),
+  })
+  const villages = villagesData?.data ?? []
+
   const createMutation = useMutation({
     mutationFn: (data) => api.post('/api/broadcast/groups', { group_id: data.zaloGroupId, name: data.name, icon: data.icon }).then((r) => r.data),
     onSuccess: () => {
@@ -524,6 +542,8 @@ export default function SettingsPage() {
   const [addMode, setAddMode] = useState('create')
   const [selectedFollowers, setSelectedFollowers] = useState([])
   const [searchFollower, setSearchFollower] = useState('')
+  const [villageAddId, setVillageAddId] = useState('')
+  const [villageAdding, setVillageAdding] = useState(false)
 
   const availableFollowers = useMemo(() => {
     const q = searchFollower.toLowerCase()
@@ -533,6 +553,31 @@ export default function SettingsPage() {
       return f.display_name?.toLowerCase().includes(q) || f.user_id?.includes(q)
     })
   }, [followers, selectedFollowers, searchFollower])
+
+  function handleSelectAllFollowers() {
+    if (availableFollowers.length === 0) return
+    setSelectedFollowers(prev => [...prev, ...availableFollowers])
+    setSearchFollower('')
+  }
+
+  async function handleAddByVillage() {
+    if (!villageAddId || villageAdding) return
+    setVillageAdding(true)
+    try {
+      const r = await api.get(`/api/broadcast/followers/by-village/${villageAddId}`)
+      const { followers: vFollowers, totalMembers, matchedCount } = r.data
+      setSelectedFollowers(prev => {
+        const existingIds = new Set(prev.map(f => f.user_id))
+        const toAdd = vFollowers.filter(f => !existingIds.has(f.user_id))
+        return [...prev, ...toAdd]
+      })
+      toast.success(`Đã thêm follower theo thôn (${matchedCount}/${totalMembers} nhân khẩu trong thôn đã liên kết Zalo)`)
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Lỗi lấy danh sách theo thôn')
+    } finally {
+      setVillageAdding(false)
+    }
+  }
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -660,16 +705,48 @@ export default function SettingsPage() {
                     </div>
                   )}
 
-                  {/* Tìm kiếm */}
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder="Tìm follower để thêm..."
-                      value={searchFollower}
-                      onChange={(e) => setSearchFollower(e.target.value)}
-                      className="w-full h-8 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
-                    />
+                  {/* Tìm kiếm + chọn tất cả */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Tìm follower để thêm..."
+                        value={searchFollower}
+                        onChange={(e) => setSearchFollower(e.target.value)}
+                        className="w-full h-8 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllFollowers}
+                      disabled={availableFollowers.length === 0}
+                      className="h-8 px-2.5 rounded-md bg-blue-100 text-blue-700 text-xs font-semibold hover:bg-blue-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    >
+                      Chọn tất cả
+                    </button>
+                  </div>
+
+                  {/* Thêm theo thôn */}
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={villageAddId}
+                      onChange={(e) => setVillageAddId(e.target.value)}
+                      className="h-8 flex-1 min-w-0 rounded-md border border-slate-200 bg-white text-xs px-2 focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+                    >
+                      <option value="">— Thêm cả thôn —</option>
+                      {villages.map((v) => (
+                        <option key={v.id} value={v.id}>{v.ten}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddByVillage}
+                      disabled={!villageAddId || villageAdding}
+                      className="h-8 px-2.5 rounded-md bg-emerald-100 text-emerald-700 text-xs font-semibold hover:bg-emerald-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0 flex items-center gap-1"
+                    >
+                      {villageAdding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Thêm cả thôn'}
+                    </button>
                   </div>
 
                   {/* Danh sách tìm được */}
@@ -703,7 +780,7 @@ export default function SettingsPage() {
           <div className="flex gap-2 justify-end border-t border-blue-100/50 mt-3 pt-3">
             <button
               type="button"
-              onClick={() => { setShowAddForm(false); setForm({ name: '', icon: '📋', zaloGroupId: '' }); setSelectedFollowers([]) }}
+              onClick={() => { setShowAddForm(false); setForm({ name: '', icon: '📋', zaloGroupId: '' }); setSelectedFollowers([]); setVillageAddId('') }}
               className="px-3 py-1.5 rounded-md text-sm text-slate-600 hover:bg-slate-100 transition-colors"
             >
               Hủy
@@ -736,6 +813,7 @@ export default function SettingsPage() {
               key={cat.group_id}
               cat={cat}
               followers={followers}
+              villages={villages}
               onDelete={(id) => deleteCatMutation.mutate(id)}
             />
           ))}

@@ -371,6 +371,19 @@ router.post("/surveys", authenticate, requireRole(...SENDER_ROLES), async (req, 
   } catch (err) { next(err); }
 });
 
+// PUT /api/notify/surveys/:id  — sửa tiêu đề/câu hỏi/lựa chọn
+router.put("/surveys/:id", authenticate, requireRole(...SENDER_ROLES), async (req, res, next) => {
+  try {
+    const { tieuDe, deadline, questions = [] } = req.body;
+    if (!tieuDe) return fail(res, "Tiêu đề khảo sát là bắt buộc");
+    if (questions.length === 0) return fail(res, "Phải có ít nhất 1 câu hỏi");
+    const existing = await SurveyRepo.findById(req.params.id);
+    if (!existing) return notFound(res);
+    const survey = await SurveyRepo.update(req.params.id, { tieuDe, deadline, questions });
+    ok(res, survey, "Đã cập nhật khảo sát");
+  } catch (err) { next(err); }
+});
+
 // GET /api/notify/surveys/:id
 router.get("/surveys/:id", authenticate, async (req, res, next) => {
   try {
