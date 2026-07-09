@@ -28,8 +28,60 @@ router.use(authenticate, requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"));
 router.get("/followers", async (req, res, next) => {
   try {
     const list = await ZaloFollowerRepo.findAll();
-    const followers = list.map((f) => ({ user_id: f.userId, display_name: f.displayName || "", avatar: f.avatar || "", linkedMemberId: f.linkedMemberId || null }));
+    // Lấy tất cả members đã liên kết Zalo để join tên vào response
+    const linkedMembers = await prisma.member.findMany({
+      where: { zaloUserId: { not: null } },
+      select: { id: true, hoTen: true, sdt: true, zaloUserId: true, household: { select: { soHoKhau: true, village: { select: { ten: true } } } } },
+    });
+    const memberByZaloId = Object.fromEntries(linkedMembers.map((m) => [m.zaloUserId, m]));
+    const followers = list.map((f) => ({
+      user_id: f.userId,
+      display_name: f.displayName || "",
+      avatar: f.avatar || "",
+      linkedMemberId: f.linkedMemberId || null,
+      linkedMember: memberByZaloId[f.userId] || null,
+    }));
     ok(res, { followers, count: followers.length, syncing: ZaloService.isSyncing(), syncedAt: null });
+  } catch (err) { next(err); }
+});
+
+// Liên kết thủ công follower Zalo ↔ nhân khẩu
+router.post("/followers/:userId/link", async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { memberId } = req.body;
+    if (!memberId) return fail(res, "Thiếu memberId");
+
+    const member = await prisma.member.findUnique({ where: { id: memberId }, select: { id: true, hoTen: true, zaloUserId: true } });
+    if (!member) return fail(res, "Không tìm thấy nhân khẩu", 404);
+    if (member.zaloUserId && member.zaloUserId !== userId)
+      return fail(res, `Nhân khẩu này đã liên kết Zalo khác (${member.zaloUserId})`);
+
+    // Nếu follower đang link sang member cũ → gỡ member cũ trước
+    const oldFollower = await ZaloFollowerRepo.findByUserId(userId);
+    if (oldFollower?.linkedMemberId && oldFollower.linkedMemberId !== memberId) {
+      await prisma.member.updateMany({ where: { id: oldFollower.linkedMemberId }, data: { zaloUserId: null } });
+    }
+
+    await Promise.all([
+      ZaloFollowerRepo.setLink(userId, memberId),
+      prisma.member.update({ where: { id: memberId }, data: { zaloUserId: userId } }),
+    ]);
+    ok(res, { ok: true, userId, memberId, hoTen: member.hoTen });
+  } catch (err) { next(err); }
+});
+
+// Hủy liên kết follower Zalo ↔ nhân khẩu
+router.delete("/followers/:userId/link", async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const follower = await ZaloFollowerRepo.findByUserId(userId);
+    const oldMemberId = follower?.linkedMemberId;
+    await ZaloFollowerRepo.setLink(userId, null);
+    if (oldMemberId) {
+      await prisma.member.updateMany({ where: { id: oldMemberId }, data: { zaloUserId: null } });
+    }
+    ok(res, { ok: true });
   } catch (err) { next(err); }
 });
 
@@ -48,6 +100,9 @@ router.get("/followers/by-village/:villageId", async (req, res, next) => {
       }),
     ]);
     const zaloIds = new Set(membersWithZalo.map((m) => m.zaloUserId));
+    if (zaloIds.size === 0) {
+      return ok(res, { followers: [], totalMembers, matchedCount: 0 });
+    }
     const list = await ZaloFollowerRepo.findAll();
     const followers = list
       .filter((f) => zaloIds.has(f.userId))

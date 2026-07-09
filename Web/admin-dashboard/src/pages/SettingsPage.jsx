@@ -240,7 +240,7 @@ function GroupCard({ cat, followers, villages, onDelete }) {
         toast.success(`Đã thêm ${toAdd.length} người (${matchedCount}/${totalMembers} nhân khẩu trong thôn đã liên kết Zalo)`)
       }
     } catch (e) {
-      toast.error(e.response?.data?.error || 'Lỗi lấy danh sách theo thôn')
+      toast.error(e.response?.data?.message || e.response?.data?.error || e.message || 'Lỗi lấy danh sách theo thôn')
     } finally {
       setBulkAdding(false)
     }
@@ -573,7 +573,7 @@ export default function SettingsPage() {
       })
       toast.success(`Đã thêm follower theo thôn (${matchedCount}/${totalMembers} nhân khẩu trong thôn đã liên kết Zalo)`)
     } catch (e) {
-      toast.error(e.response?.data?.error || 'Lỗi lấy danh sách theo thôn')
+      toast.error(e.response?.data?.message || e.response?.data?.error || e.message || 'Lỗi lấy danh sách theo thôn')
     } finally {
       setVillageAdding(false)
     }

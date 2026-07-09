@@ -16,6 +16,7 @@ import SettingsPage from './pages/SettingsPage'
 import SurveyFill from './pages/SurveyFill'
 import KhaoSat from './pages/KhaoSat'
 import BaoCaoThongBao from './pages/BaoCaoThongBao'
+import ZaloLinkPage from './pages/ZaloLinkPage'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -47,6 +48,7 @@ function AppRoutes() {
         <Route path="cai-dat"  element={<CaiDat />} />
         <Route path="thong-bao"      element={<MessagesPage />} />
         <Route path="nhom-zalo"      element={<SettingsPage />} />
+        <Route path="zalo-link"      element={<ZaloLinkPage />} />
         <Route path="nguoi-nhan"     element={<Navigate to="/thong-bao" replace />} />
         <Route path="khao-sat"       element={<KhaoSat />} />
         <Route path="bao-cao-tb"     element={<BaoCaoThongBao />} />
