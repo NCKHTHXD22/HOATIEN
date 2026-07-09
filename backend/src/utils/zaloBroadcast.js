@@ -88,26 +88,4 @@ async function uploadFileToZalo(filepath, originalName) {
   return token;
 }
 
-// Gửi form "Chia sẻ thông tin" (request_user_info) — dân bấm đồng ý là OA nhận
-// được tên+SĐT+địa chỉ qua webhook event user_submit_info
-async function sendRequestUserInfo(userId) {
-  const res = await _post(MSG_API, {
-    recipient: { user_id: String(userId) },
-    message: {
-      attachment: {
-        type: "template",
-        payload: {
-          template_type: "request_user_info",
-          elements: [{
-            title: "UBND Xã Hòa Tiến",
-            subtitle: "Vui lòng chia sẻ số điện thoại để chúng tôi liên kết bạn với hồ sơ nhân khẩu (chỉ dùng cho quản lý dân cư).",
-            image_url: "https://hoatien.vercel.app/hoa-tien-logo.jpg",
-          }],
-        },
-      },
-    },
-  });
-  if (res.data?.error !== 0) throw new Error(`Zalo ${res.data?.error}: ${res.data?.message}`);
-}
-
-module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo, sendRequestUserInfo };
+module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo };

@@ -166,7 +166,7 @@ function FollowerRow({ follower, onLink, onUnlink, onRequestInfo, linking, unlin
               type="button"
               onClick={() => onRequestInfo(follower)}
               disabled={requesting}
-              title="Gửi form Zalo xin dân chia sẻ SĐT — dân bấm đồng ý là tự động liên kết"
+              title="Gửi tin Zalo đề nghị dân nhắn SĐT — dân trả lời số là tự động liên kết"
               className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-colors disabled:opacity-40"
             >
               {requesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Phone className="h-3 w-3" />}
@@ -253,7 +253,7 @@ export default function ZaloLinkPage() {
 
   const handleRequestInfo = async (follower) => {
     const name = follower.display_name || follower.user_id
-    if (!window.confirm(`Gửi form "Chia sẻ thông tin" tới ${name}?\nDân bấm đồng ý là hệ thống tự liên kết theo SĐT.`)) return
+    if (!window.confirm(`Gửi tin đề nghị ${name} nhắn số điện thoại?\nDân trả lời SĐT là hệ thống tự liên kết.`)) return
     setRequestingId(follower.user_id)
     try {
       await api.post(`/api/broadcast/followers/${follower.user_id}/request-info`)

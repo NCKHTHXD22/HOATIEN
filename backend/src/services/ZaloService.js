@@ -52,6 +52,16 @@ async function handleMessage(zaloUserId, text) {
   }
 
   const session = (await ZaloSessionRepo.getOrCreate(zaloUserId)) || { state: "IDLE" };
+
+  // Dân nhắn thẳng SĐT của mình để liên kết hồ sơ (không đè lên bước nhập SĐT của luồng tra cứu)
+  if (session.state !== "AWAIT_QUERY" && _normPhone(text)) {
+    const follower = await ZaloFollowerRepo.findByUserId(zaloUserId).catch(() => null);
+    if (!follower?.linkedMemberId) {
+      await handleUserSubmitInfo(zaloUserId, { phone: text });
+      return null; // handleUserSubmitInfo tự nhắn phản hồi
+    }
+  }
+
   const { nextState, reply, query, queryType } = stateMachine(session, text);
 
   let replyText = reply;

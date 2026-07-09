@@ -46,11 +46,15 @@ router.get("/followers", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Gửi form "Chia sẻ thông tin" (xin SĐT) tới 1 follower — dân bấm đồng ý là tự liên kết
+// Gửi tin đề nghị dân nhắn SĐT — dân trả lời số là webhook tự khớp + liên kết
+// (không dùng form request_user_info của Zalo vì OAuth đòi duyệt app, hay lỗi -14003)
 router.post("/followers/:userId/request-info", requireSendPermission(), async (req, res, next) => {
   try {
-    const { sendRequestUserInfo } = require("../utils/zaloBroadcast");
-    await sendRequestUserInfo(req.params.userId);
+    const { sendText } = require("../utils/zaloBroadcast");
+    await sendText(
+      req.params.userId,
+      "📱 UBND Xã Hòa Tiến kính đề nghị bà con nhắn SỐ ĐIỆN THOẠI của mình (VD: 0905123456) để liên kết với hồ sơ nhân khẩu.\n\nSố điện thoại chỉ dùng cho công tác quản lý dân cư và gửi thông báo của xã."
+    );
     ok(res, { ok: true });
   } catch (err) { next(err); }
 });
