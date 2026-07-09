@@ -101,7 +101,7 @@ async function sendRequestUserInfo(userId) {
           elements: [{
             title: "UBND Xã Hòa Tiến",
             subtitle: "Vui lòng chia sẻ số điện thoại để chúng tôi liên kết bạn với hồ sơ nhân khẩu (chỉ dùng cho quản lý dân cư).",
-            image_url: "https://stc-oa.zdn.vn/uploads/2020/02/17/49a4e0a2f7961ec84787.png",
+            image_url: "https://hoatien.vercel.app/hoa-tien-logo.jpg",
           }],
         },
       },
