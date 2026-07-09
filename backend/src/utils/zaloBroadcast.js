@@ -88,4 +88,26 @@ async function uploadFileToZalo(filepath, originalName) {
   return token;
 }
 
-module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo };
+// Gửi form "Chia sẻ thông tin" (request_user_info) — dân bấm đồng ý là OA nhận
+// được tên+SĐT+địa chỉ qua webhook event user_submit_info
+async function sendRequestUserInfo(userId) {
+  const res = await _post(MSG_API, {
+    recipient: { user_id: String(userId) },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "request_user_info",
+          elements: [{
+            title: "UBND Xã Hòa Tiến",
+            subtitle: "Vui lòng chia sẻ số điện thoại để chúng tôi liên kết bạn với hồ sơ nhân khẩu (chỉ dùng cho quản lý dân cư).",
+            image_url: "https://stc-oa.zdn.vn/uploads/2020/02/17/49a4e0a2f7961ec84787.png",
+          }],
+        },
+      },
+    },
+  });
+  if (res.data?.error !== 0) throw new Error(`Zalo ${res.data?.error}: ${res.data?.message}`);
+}
+
+module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo, sendRequestUserInfo };

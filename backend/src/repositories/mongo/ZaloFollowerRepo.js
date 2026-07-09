@@ -47,4 +47,12 @@ const setLink = (userId, memberId) =>
     { new: true, upsert: true }
   );
 
-module.exports = { upsertMany, upsertIds, findAll, findByUserId, setLink };
+// Lưu SĐT dân tự chia sẻ (form request_user_info)
+const setPhone = (userId, phone) =>
+  ZaloFollower.findOneAndUpdate(
+    { userId },
+    { $set: { phone: phone || "" }, $setOnInsert: { displayName: "", avatar: "", linkedMemberId: null } },
+    { new: true, upsert: true }
+  );
+
+module.exports = { upsertMany, upsertIds, findAll, findByUserId, setLink, setPhone };

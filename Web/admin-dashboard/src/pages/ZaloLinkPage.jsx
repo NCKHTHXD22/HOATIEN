@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
-  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle,
+  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle, Phone,
 } from 'lucide-react'
 
 function useDebounce(value, delay = 300) {
@@ -92,7 +92,7 @@ function MemberCombobox({ onSelect, disabled }) {
   )
 }
 
-function FollowerRow({ follower, onLink, onUnlink, linking, unlinking }) {
+function FollowerRow({ follower, onLink, onUnlink, onRequestInfo, linking, unlinking, requesting }) {
   const [selected, setSelected] = useState(null)
   const linked = follower.linkedMember
 
@@ -108,6 +108,11 @@ function FollowerRow({ follower, onLink, onUnlink, linking, unlinking }) {
           )}
         </p>
         <p className="text-[11px] text-slate-400 font-mono truncate">{follower.user_id}</p>
+        {follower.phone && (
+          <p className="text-[11px] text-emerald-600 font-mono truncate flex items-center gap-0.5">
+            <Phone className="h-2.5 w-2.5" /> {follower.phone}
+          </p>
+        )}
       </div>
 
       {/* Khu vực link */}
@@ -156,17 +161,29 @@ function FollowerRow({ follower, onLink, onUnlink, linking, unlinking }) {
             Hủy
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => { if (selected) onLink(follower.user_id, selected.id, () => setSelected(null)) }}
-            disabled={!selected || linking}
-            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {linking
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <Link2 className="h-3 w-3" />}
-            Liên kết
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onRequestInfo(follower)}
+              disabled={requesting}
+              title="Gửi form Zalo xin dân chia sẻ SĐT — dân bấm đồng ý là tự động liên kết"
+              className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-colors disabled:opacity-40"
+            >
+              {requesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Phone className="h-3 w-3" />}
+              Xin SĐT
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (selected) onLink(follower.user_id, selected.id, () => setSelected(null)) }}
+              disabled={!selected || linking}
+              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {linking
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <Link2 className="h-3 w-3" />}
+              Liên kết
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -179,6 +196,7 @@ export default function ZaloLinkPage() {
   const [search, setSearch] = useState('')
   const [linkingId, setLinkingId] = useState(null)
   const [unlinkingId, setUnlinkingId] = useState(null)
+  const [requestingId, setRequestingId] = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['zalo-followers-linked'],
@@ -199,6 +217,7 @@ export default function ZaloLinkPage() {
       list = list.filter(f =>
         f.display_name?.toLowerCase().includes(q) ||
         f.user_id?.includes(q) ||
+        f.phone?.includes(q) ||
         f.linkedMember?.hoTen?.toLowerCase().includes(q)
       )
     }
@@ -229,6 +248,20 @@ export default function ZaloLinkPage() {
       toast.error(e.response?.data?.message || e.response?.data?.error || 'Lỗi hủy liên kết')
     } finally {
       setUnlinkingId(null)
+    }
+  }
+
+  const handleRequestInfo = async (follower) => {
+    const name = follower.display_name || follower.user_id
+    if (!window.confirm(`Gửi form "Chia sẻ thông tin" tới ${name}?\nDân bấm đồng ý là hệ thống tự liên kết theo SĐT.`)) return
+    setRequestingId(follower.user_id)
+    try {
+      await api.post(`/api/broadcast/followers/${follower.user_id}/request-info`)
+      toast.success(`Đã gửi form xin SĐT tới ${name}`)
+    } catch (e) {
+      toast.error(e.response?.data?.message || e.response?.data?.error || 'Lỗi gửi form (chú ý luật 48h của Zalo)')
+    } finally {
+      setRequestingId(null)
     }
   }
 
@@ -334,8 +367,10 @@ export default function ZaloLinkPage() {
                 follower={f}
                 onLink={handleLink}
                 onUnlink={handleUnlink}
+                onRequestInfo={handleRequestInfo}
                 linking={linkingId === f.user_id}
                 unlinking={unlinkingId === f.user_id}
+                requesting={requestingId === f.user_id}
               />
             ))}
           </div>

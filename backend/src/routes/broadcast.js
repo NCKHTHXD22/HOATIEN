@@ -38,10 +38,20 @@ router.get("/followers", async (req, res, next) => {
       user_id: f.userId,
       display_name: f.displayName || "",
       avatar: f.avatar || "",
+      phone: f.phone || "",
       linkedMemberId: f.linkedMemberId || null,
       linkedMember: memberByZaloId[f.userId] || null,
     }));
     ok(res, { followers, count: followers.length, syncing: ZaloService.isSyncing(), syncedAt: null });
+  } catch (err) { next(err); }
+});
+
+// Gửi form "Chia sẻ thông tin" (xin SĐT) tới 1 follower — dân bấm đồng ý là tự liên kết
+router.post("/followers/:userId/request-info", requireSendPermission(), async (req, res, next) => {
+  try {
+    const { sendRequestUserInfo } = require("../utils/zaloBroadcast");
+    await sendRequestUserInfo(req.params.userId);
+    ok(res, { ok: true });
   } catch (err) { next(err); }
 });
 
