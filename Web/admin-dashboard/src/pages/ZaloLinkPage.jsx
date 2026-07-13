@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
-  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle, Phone,
+  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle, Phone, UserSearch,
 } from 'lucide-react'
 
 function useDebounce(value, delay = 300) {
@@ -195,8 +195,85 @@ function FollowerRow({ follower, onLink, onUnlink, onRequestInfo, linking, unlin
   )
 }
 
+// ── Tra cứu nhân khẩu theo SĐT/tên, kiểm tra đã follow OA Zalo hay chưa ──
+function PhoneLookupPanel({ followers }) {
+  const [query, setQuery] = useState('')
+  const dq = useDebounce(query, 300)
+
+  const followerByZaloId = useMemo(
+    () => Object.fromEntries(followers.map((f) => [f.user_id, f])),
+    [followers]
+  )
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['member-lookup', dq],
+    queryFn: () => api.get(`/api/members/search?q=${encodeURIComponent(dq)}`).then((r) => r.data?.data ?? []),
+    enabled: dq.trim().length >= 2,
+    staleTime: 10000,
+  })
+
+  const results = data ?? []
+
+  return (
+    <div className="space-y-4">
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Nhập SĐT hoặc tên nhân khẩu..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full h-9 pl-9 pr-3 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+        />
+        {isFetching && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-slate-400" />
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        {query.trim().length < 2 ? (
+          <p className="py-12 text-center text-sm text-slate-400">Nhập ít nhất 2 ký tự (SĐT hoặc tên) để tra cứu</p>
+        ) : results.length === 0 ? (
+          isFetching
+            ? <div className="flex items-center justify-center py-12 gap-2 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Đang tìm...</span></div>
+            : <p className="py-12 text-center text-sm text-slate-400">Không tìm thấy nhân khẩu nào khớp</p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {results.map((m) => {
+              const follower = m.zaloUserId ? followerByZaloId[m.zaloUserId] : null
+              const followed = !!m.zaloUserId
+              return (
+                <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+                  <Avatar name={follower?.display_name || m.hoTen} avatar={follower?.avatar} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{m.hoTen}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {[m.sdt, m.household?.village?.ten, m.household?.soHoKhau ? `Hộ ${m.household.soHoKhau}` : null]
+                        .filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  {followed ? (
+                    <span className="flex items-center gap-1 shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      <CheckCircle2 className="h-3 w-3" /> Đã follow OA{follower?.display_name ? ` · ${follower.display_name}` : ''}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
+                      <XCircle className="h-3 w-3" /> Chưa follow OA Zalo
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ZaloLinkPage() {
   const queryClient = useQueryClient()
+  const [mode, setMode] = useState('followers')
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [linkingId, setLinkingId] = useState(null)
@@ -324,6 +401,28 @@ export default function ZaloLinkPage() {
         </p>
       </div>
 
+      {/* Chuyển chế độ */}
+      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+        <button
+          type="button"
+          onClick={() => setMode('followers')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${mode === 'followers' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <Users className="h-3.5 w-3.5" /> Danh sách Follower
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('lookup')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${mode === 'lookup' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <UserSearch className="h-3.5 w-3.5" /> Tra cứu theo SĐT
+        </button>
+      </div>
+
+      {mode === 'lookup' ? (
+        <PhoneLookupPanel followers={followers} />
+      ) : (
+      <>
       {/* Stats card */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-2.5">
         <div className="flex items-center justify-between">
@@ -447,6 +546,8 @@ export default function ZaloLinkPage() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }
