@@ -47,9 +47,12 @@ app.get("/health", (req, res) => {
 });
 
 // ─── Zalo domain verification ─────────────────────────────
-// Zalo yêu cầu file này tồn tại ở root domain để xác thực
+// Zalo yêu cầu file này tồn tại ở root domain để xác thực (nội dung khớp file Zalo phát)
 app.get("/zalo_verifier*.html", (req, res) => {
-  res.type("html").send("There Is No Limit To What You Can Accomplish Using Zalo!");
+  const code = process.env.ZALO_VERIFIER_CODE || "UExa2QR4Dp9Ymf5bj_KVPN7eXsMTdb8pDJWm";
+  res.type("html").send(
+    `<!DOCTYPE html>\n<html lang="en">\n\n<head>\n    <meta property="zalo-platform-site-verification" content="${code}" />\n</head>\n\n<body>\nThere Is No Limit To What You Can Accomplish Using Zalo!\n</body>\n\n</html>`
+  );
 });
 
 // ─── Routes ───────────────────────────────────────────────

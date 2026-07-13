@@ -30,6 +30,13 @@ router.post("/webhook", async (req, res) => {
       return res.status(200).json({ error: 0 });
     }
 
+    // Dân bấm "Chia sẻ thông tin" (form request_user_info) → lưu SĐT + tự liên kết nhân khẩu
+    if (req.body.event_name === "user_submit_info") {
+      const info = req.body.info || req.body.message?.info || {};
+      ZaloService.handleUserSubmitInfo(userId, info).catch((e) => logger.error(`handleUserSubmitInfo: ${e.message}`));
+      return res.status(200).json({ error: 0 });
+    }
+
     // Có người xin vào nhóm Zalo (GMF) → tự động duyệt nếu nhóm đó đã bật "Tự động duyệt"
     const GROUP_JOIN_REQUEST_EVENTS = ["user_request_join_group", "react_request_join_group"];
     if (GROUP_JOIN_REQUEST_EVENTS.includes(req.body.event_name)) {

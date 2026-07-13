@@ -31,8 +31,10 @@ const TAB_FILTER = {
   'Tạm trú':    { loaiHo: 'TAM_TRU' },
   'Tạm vắng':  { loaiHo: 'TAM_VANG' },
 }
-const COLUMNS    = ['Số HK', 'Chủ hộ', 'Địa chỉ', 'Thôn', 'Tổ', 'Loại hộ', 'Nhân khẩu', 'Trạng thái', '']
+const COLUMNS    = ['Số HK', 'Chủ hộ', 'SĐT', 'Địa chỉ', 'Thôn', 'Tổ', 'Loại hộ', 'Nhân khẩu', 'Trạng thái', '']
 const chuHoName  = h => h.members?.find(m => m.laChuHo)?.hoTen || h.members?.[0]?.hoTen || '—'
+// SĐT hộ: ưu tiên SĐT chủ hộ, không có thì lấy của thành viên đầu tiên có SĐT
+const chuHoSdt   = h => h.members?.find(m => m.laChuHo)?.sdt || h.members?.find(m => m.sdt)?.sdt || '—'
 const EMPTY_HH   = { soHoKhau: '', diaChi: '', to: '', villageId: '', loaiHo: 'THUONG_TRU', trangThai: 'ACTIVE' }
 const EMPTY_MEM  = { hoTen: '', ngaySinh: '', gioiTinh: 'NAM', cccd: '', sdt: '', quanHeChuHo: '', laChuHo: false }
 const NO_INFO    = 'Không có thông tin'
@@ -425,6 +427,7 @@ export default function HoSo() {
               <tr key={h.id} className="border-b border-border hover:bg-secondary/50 transition-colors">
                 <td className="px-5 py-3 font-mono text-xs font-semibold text-foreground">{h.soHoKhau}</td>
                 <td className="px-5 py-3 text-sm font-medium text-foreground max-w-[160px] truncate">{chuHoName(h)}</td>
+                <td className="px-5 py-3 text-sm text-muted-foreground font-mono whitespace-nowrap">{chuHoSdt(h)}</td>
                 <td className="px-5 py-3 text-sm text-foreground max-w-[200px] truncate">{h.diaChi}</td>
                 <td className="px-5 py-3 text-sm text-muted-foreground">{h.village?.ten ?? '—'}</td>
                 <td className="px-5 py-3 text-sm text-muted-foreground">{h.to ?? '—'}</td>

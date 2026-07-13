@@ -38,10 +38,40 @@ router.get("/followers", async (req, res, next) => {
       user_id: f.userId,
       display_name: f.displayName || "",
       avatar: f.avatar || "",
+      phone: f.phone || "",
       linkedMemberId: f.linkedMemberId || null,
       linkedMember: memberByZaloId[f.userId] || null,
     }));
     ok(res, { followers, count: followers.length, syncing: ZaloService.isSyncing(), syncedAt: null });
+  } catch (err) { next(err); }
+});
+
+// Nội dung tin đề nghị dân nhắn SĐT (dân trả lời số là webhook tự khớp + liên kết)
+const REQUEST_PHONE_MSG =
+  "📱 UBND Xã Hòa Tiến kính đề nghị bà con nhắn SỐ ĐIỆN THOẠI của mình (VD: 0905123456) để liên kết với hồ sơ nhân khẩu.\n\nSố điện thoại chỉ dùng cho công tác quản lý dân cư và gửi thông báo của xã.";
+
+// Gửi tin xin SĐT tới 1 follower (không dùng form request_user_info vì OAuth hay lỗi -14003)
+router.post("/followers/:userId/request-info", requireSendPermission(), async (req, res, next) => {
+  try {
+    const { sendText } = require("../utils/zaloBroadcast");
+    await sendText(req.params.userId, REQUEST_PHONE_MSG);
+    ok(res, { ok: true });
+  } catch (err) { next(err); }
+});
+
+// Gửi tin xin SĐT hàng loạt (chỉ tới các userIds truyền lên — thường là follower chưa liên kết)
+router.post("/followers/request-info-bulk", requireSendPermission(), async (req, res, next) => {
+  try {
+    const { userIds = [] } = req.body;
+    if (!Array.isArray(userIds) || userIds.length === 0) return fail(res, "Cần danh sách userIds");
+    const { sendText } = require("../utils/zaloBroadcast");
+    let sent = 0;
+    const failed = [];
+    for (const uid of userIds) {
+      try { await sendText(String(uid), REQUEST_PHONE_MSG); sent++; }
+      catch (e) { failed.push({ userId: String(uid), error: e.message }); }
+    }
+    ok(res, { sent, failed: failed.length, total: userIds.length });
   } catch (err) { next(err); }
 });
 
@@ -240,11 +270,17 @@ router.post("/groups/:groupId/members/sync", async (req, res, next) => {
   try {
     const { members } = await zaloGmf.getGroupMembersV3(req.params.groupId);
     await ZaloGroupMember.deleteMany({ groupId: req.params.groupId });
+    // GMF listmember thường chỉ trả user_id (không kèm tên) → ghép tên từ danh bạ follower đã đồng bộ
+    const followers = await ZaloFollowerRepo.findAll();
+    const byId = Object.fromEntries(followers.map((f) => [f.userId, f]));
     let synced = 0;
     for (const m of members) {
-      const uid = m.user_id || m.member_id || m.id;
+      const uid = String(typeof m === "string" ? m : (m.user_id || m.member_id || m.id || ""));
       if (!uid) continue;
-      await ZaloGroupMember.create({ groupId: req.params.groupId, zaloUserId: String(uid), displayName: m.display_name || "", avatar: m.avatar || "" }).catch(() => {});
+      const f = byId[uid] || {};
+      const displayName = m.display_name || m.name || f.displayName || "";
+      const avatar = m.avatar || f.avatar || "";
+      await ZaloGroupMember.create({ groupId: req.params.groupId, zaloUserId: uid, displayName, avatar }).catch(() => {});
       synced++;
     }
     res.json({ ok: true, synced });
