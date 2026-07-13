@@ -195,13 +195,28 @@ function FollowerRow({ follower, onLink, onUnlink, onRequestInfo, linking, unlin
   )
 }
 
+// So khớp SĐT bất kể định dạng (0xxx / +84xxx / 84xxx) — so 9 số cuối
+function normPhone(p) {
+  const digits = (p || '').replace(/\D/g, '')
+  return digits.slice(-9)
+}
+
 // ── Tra cứu nhân khẩu theo SĐT/tên, kiểm tra đã follow OA Zalo hay chưa ──
+// Không chỉ dựa vào zaloUserId đã liên kết chính thức — còn đối chiếu SĐT nhân khẩu
+// với follower.phone (SĐT dân tự nhắn qua chat) để bắt cả trường hợp đã follow + đã
+// nhắn SĐT nhưng chưa được liên kết (VD: trùng SĐT nhiều nhân khẩu, cần admin chọn tay).
 function PhoneLookupPanel({ followers }) {
   const [query, setQuery] = useState('')
   const dq = useDebounce(query, 300)
+  const queryClient = useQueryClient()
+  const [linkingId, setLinkingId] = useState(null)
 
   const followerByZaloId = useMemo(
     () => Object.fromEntries(followers.map((f) => [f.user_id, f])),
+    [followers]
+  )
+  const followerByPhone = useMemo(
+    () => Object.fromEntries(followers.filter((f) => f.phone).map((f) => [normPhone(f.phone), f])),
     [followers]
   )
 
@@ -213,6 +228,19 @@ function PhoneLookupPanel({ followers }) {
   })
 
   const results = data ?? []
+
+  const handleLink = async (userId, memberId) => {
+    setLinkingId(userId)
+    try {
+      await api.post(`/api/broadcast/followers/${userId}/link`, { memberId })
+      toast.success('Đã liên kết thành công')
+      queryClient.invalidateQueries({ queryKey: ['zalo-followers-linked'] })
+    } catch (e) {
+      toast.error(e.response?.data?.message || e.response?.data?.error || 'Lỗi liên kết')
+    } finally {
+      setLinkingId(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -240,8 +268,9 @@ function PhoneLookupPanel({ followers }) {
         ) : (
           <div className="divide-y divide-slate-100">
             {results.map((m) => {
-              const follower = m.zaloUserId ? followerByZaloId[m.zaloUserId] : null
-              const followed = !!m.zaloUserId
+              const linkedFollower = m.zaloUserId ? followerByZaloId[m.zaloUserId] : null
+              const phoneFollower = !linkedFollower && m.sdt ? followerByPhone[normPhone(m.sdt)] : null
+              const follower = linkedFollower || phoneFollower
               return (
                 <div key={m.id} className="flex items-center gap-3 px-4 py-3">
                   <Avatar name={follower?.display_name || m.hoTen} avatar={follower?.avatar} />
@@ -252,10 +281,25 @@ function PhoneLookupPanel({ followers }) {
                         .filter(Boolean).join(' · ')}
                     </p>
                   </div>
-                  {followed ? (
+                  {linkedFollower ? (
                     <span className="flex items-center gap-1 shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
                       <CheckCircle2 className="h-3 w-3" /> Đã follow OA{follower?.display_name ? ` · ${follower.display_name}` : ''}
                     </span>
+                  ) : phoneFollower ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                        <CheckCircle2 className="h-3 w-3" /> Đã follow (chưa liên kết)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleLink(phoneFollower.user_id, m.id)}
+                        disabled={linkingId === phoneFollower.user_id}
+                        className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors disabled:opacity-40"
+                      >
+                        {linkingId === phoneFollower.user_id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
+                        Liên kết
+                      </button>
+                    </div>
                   ) : (
                     <span className="flex items-center gap-1 shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
                       <XCircle className="h-3 w-3" /> Chưa follow OA Zalo
