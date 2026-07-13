@@ -198,7 +198,9 @@ function GroupCard({ cat, followers, villages, onDelete }) {
       if (!q) return true
       return (
         f.display_name?.toLowerCase().includes(q) ||
-        f.user_id?.includes(q)
+        f.user_id?.includes(q) ||
+        f.linkedMember?.hoTen?.toLowerCase().includes(q) ||
+        f.linkedMember?.sdt?.includes(q)
       )
     })
   }, [followers, memberIds, search])
@@ -347,7 +349,7 @@ function GroupCard({ cat, followers, villages, onDelete }) {
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                     <input
                       type="text"
-                      placeholder="Tìm theo tên hoặc ID..."
+                      placeholder="Tìm theo tên, SĐT hoặc ID..."
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       className="w-full h-8 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
@@ -408,8 +410,13 @@ function GroupCard({ cat, followers, villages, onDelete }) {
                           <div className="min-w-0 flex-1">
                             <p className={`text-sm font-medium truncate ${hasName ? 'text-slate-700' : 'text-slate-400 italic'}`}>
                               {hasName ? f.display_name : '(Chưa có tên)'}
+                              {f.linkedMember?.hoTen && f.linkedMember.hoTen !== f.display_name && (
+                                <span className="text-slate-400 font-normal"> · {f.linkedMember.hoTen}</span>
+                              )}
                             </p>
-                            <p className="text-[11px] text-slate-400 font-mono">{f.user_id}</p>
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              {f.linkedMember?.sdt ? f.linkedMember.sdt : f.user_id}
+                            </p>
                           </div>
                           <Plus className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                         </button>
@@ -550,7 +557,12 @@ export default function SettingsPage() {
     return followers.filter(f => {
       if (selectedFollowers.some(sf => sf.user_id === f.user_id)) return false
       if (!q) return true
-      return f.display_name?.toLowerCase().includes(q) || f.user_id?.includes(q)
+      return (
+        f.display_name?.toLowerCase().includes(q) ||
+        f.user_id?.includes(q) ||
+        f.linkedMember?.hoTen?.toLowerCase().includes(q) ||
+        f.linkedMember?.sdt?.includes(q)
+      )
     })
   }, [followers, selectedFollowers, searchFollower])
 
@@ -711,7 +723,7 @@ export default function SettingsPage() {
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                       <input
                         type="text"
-                        placeholder="Tìm follower để thêm..."
+                        placeholder="Tìm follower theo tên, SĐT..."
                         value={searchFollower}
                         onChange={(e) => setSearchFollower(e.target.value)}
                         className="w-full h-8 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
@@ -761,7 +773,12 @@ export default function SettingsPage() {
                         >
                           <Avatar name={f.display_name} avatar={f.avatar} size={6} />
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-slate-700 truncate">{f.display_name || '(Không tên)'}</p>
+                            <p className="text-xs font-medium text-slate-700 truncate">
+                              {f.display_name || f.linkedMember?.hoTen || '(Không tên)'}
+                            </p>
+                            {f.linkedMember?.sdt && (
+                              <p className="text-[10px] text-slate-400 font-mono">{f.linkedMember.sdt}</p>
+                            )}
                           </div>
                           <Plus className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                         </button>

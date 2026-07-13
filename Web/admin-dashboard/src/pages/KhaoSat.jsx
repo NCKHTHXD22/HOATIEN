@@ -307,7 +307,11 @@ function SendZaloModal({ survey, open, onClose }) {
   if (!open) return null
   const filtered = followers.filter(f => {
     const q = search.toLowerCase()
-    return !q || (f.display_name || '').toLowerCase().includes(q) || (f.user_id || '').includes(q)
+    return !q ||
+      (f.display_name || '').toLowerCase().includes(q) ||
+      (f.user_id || '').includes(q) ||
+      (f.linkedMember?.hoTen || '').toLowerCase().includes(q) ||
+      (f.linkedMember?.sdt || '').includes(q)
   })
   const toggle = id => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
   const toggleGroup = id => setSelectedGroups(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
@@ -360,7 +364,7 @@ function SendZaloModal({ survey, open, onClose }) {
             <div className="relative flex-1">
               <Search size={13} className="absolute left-3 top-2.5 text-gray-400" />
               <input className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                placeholder="Tìm follower..." value={search} onChange={e => setSearch(e.target.value)} />
+                placeholder="Tìm theo tên, SĐT..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <button onClick={selectAllFiltered} disabled={filtered.length === 0}
               className="shrink-0 px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -374,7 +378,12 @@ function SendZaloModal({ survey, open, onClose }) {
             : filtered.map(f => (
               <label key={f.user_id} className="flex items-center gap-3 px-6 py-2.5 hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" checked={selected.includes(f.user_id)} onChange={() => toggle(f.user_id)} className="rounded" />
-                <span className="text-sm flex-1 truncate">{f.display_name || '(Chưa có tên)'}</span>
+                <span className="text-sm flex-1 truncate min-w-0">
+                  {f.display_name || f.linkedMember?.hoTen || '(Chưa có tên)'}
+                  {f.linkedMember?.sdt && (
+                    <span className="text-gray-400 text-xs ml-1.5">· {f.linkedMember.sdt}</span>
+                  )}
+                </span>
               </label>
             ))
           }
