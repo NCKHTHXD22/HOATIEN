@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
-  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle, Phone, UserSearch,
+  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle, Phone, UserSearch, MessagesSquare,
 } from 'lucide-react'
 
 function useDebounce(value, delay = 300) {
@@ -325,6 +325,7 @@ export default function ZaloLinkPage() {
   const [requestingId, setRequestingId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkSending, setBulkSending] = useState(false)
+  const [scanPolling, setScanPolling] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['zalo-followers-linked'],
@@ -335,6 +336,35 @@ export default function ZaloLinkPage() {
   const followers = data?.followers ?? []
   const linkedCount = useMemo(() => followers.filter(f => !!f.linkedMember).length, [followers])
   const pct = followers.length > 0 ? Math.round((linkedCount / followers.length) * 100) : 0
+
+  // Trạng thái quét hội thoại (poll 2s khi đang chạy)
+  const { data: scanData } = useQuery({
+    queryKey: ['zalo-scan-status'],
+    queryFn: () => api.get('/api/broadcast/followers/scan-conversations/status').then(r => r.data),
+    refetchInterval: scanPolling ? 2000 : false,
+  })
+  useEffect(() => {
+    if (scanData?.running && !scanPolling) setScanPolling(true)
+    if (scanPolling && scanData && !scanData.running && scanData.finishedAt) {
+      setScanPolling(false)
+      toast.success(`Quét xong ${scanData.scanned} hội thoại — tìm thấy ${scanData.phonesFound} SĐT, tự liên kết ${scanData.linked}`)
+      queryClient.invalidateQueries({ queryKey: ['zalo-followers-linked'] })
+    }
+  }, [scanData, scanPolling, queryClient])
+
+  const handleScan = async () => {
+    if (!window.confirm(
+      'Quét lịch sử hội thoại của toàn bộ follower CHƯA liên kết để tìm SĐT dân từng nhắn?\n\n' +
+      'Chạy nền vài phút, KHÔNG gửi tin gì cho dân. Tìm thấy SĐT khớp đúng 1 nhân khẩu sẽ tự liên kết.'
+    )) return
+    try {
+      await api.post('/api/broadcast/followers/scan-conversations')
+      setScanPolling(true)
+      toast.info('Đang quét hội thoại ở chế độ nền...')
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Lỗi khởi động quét')
+    }
+  }
 
   const filtered = useMemo(() => {
     let list = followers
@@ -524,6 +554,18 @@ export default function ZaloLinkPage() {
             className="w-full h-9 pl-9 pr-3 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
           />
         </div>
+
+        <button
+          type="button"
+          onClick={handleScan}
+          disabled={scanPolling}
+          title="Đọc lịch sử chat của follower chưa liên kết, tìm SĐT dân từng nhắn để tự liên kết (không gửi tin gì)"
+          className="flex items-center gap-1.5 h-9 px-3 text-sm font-semibold rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors disabled:opacity-60"
+        >
+          {scanPolling
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang quét {scanData?.scanned ?? 0}/{scanData?.total ?? '…'}</>
+            : <><MessagesSquare className="h-3.5 w-3.5" /> Quét hội thoại tìm SĐT</>}
+        </button>
       </div>
 
       {/* Thanh chọn hàng loạt */}

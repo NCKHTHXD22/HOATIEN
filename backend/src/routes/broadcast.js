@@ -59,6 +59,18 @@ router.post("/followers/:userId/request-info", requireSendPermission(), async (r
   } catch (err) { next(err); }
 });
 
+// Quét lịch sử hội thoại của follower chưa liên kết tìm SĐT dân từng nhắn → tự liên kết (chạy nền)
+router.post("/followers/scan-conversations", async (req, res, next) => {
+  try {
+    const r = ZaloService.startScanConversations();
+    ok(res, { ...r, ...ZaloService.getScanState() });
+  } catch (err) { next(err); }
+});
+
+router.get("/followers/scan-conversations/status", async (req, res, next) => {
+  try { ok(res, ZaloService.getScanState()); } catch (err) { next(err); }
+});
+
 // Gửi tin xin SĐT hàng loạt (chỉ tới các userIds truyền lên — thường là follower chưa liên kết)
 router.post("/followers/request-info-bulk", requireSendPermission(), async (req, res, next) => {
   try {

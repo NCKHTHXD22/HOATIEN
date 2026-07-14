@@ -154,10 +154,11 @@ function _normPhone(raw) {
   return /^0\d{9,10}$/.test(s) ? s : "";
 }
 
-// Webhook user_submit_info: dân bấm chia sẻ thông tin -> lưu SĐT + tự liên kết nhân khẩu
-async function handleUserSubmitInfo(zaloUserId, info = {}) {
-  const phone = _normPhone(info.phone);
-  if (!phone) { logger.warn(`user_submit_info [${zaloUserId}]: SĐT không hợp lệ "${info.phone}"`); return; }
+// Lõi liên kết theo SĐT: lưu phone vào follower + khớp nhân khẩu.
+// Trả về: 'invalid' | 'linked' | 'saved' (chưa khớp ai) | 'ambiguous' (khớp nhiều) | 'taken' (SĐT thuộc người đã link Zalo khác)
+async function _linkByPhone(zaloUserId, rawPhone) {
+  const phone = _normPhone(rawPhone);
+  if (!phone) return { status: "invalid" };
   await ZaloFollowerRepo.setPhone(zaloUserId, phone);
 
   // Khớp nhân khẩu theo SĐT (thử cả các biến thể +84/84)
@@ -165,27 +166,28 @@ async function handleUserSubmitInfo(zaloUserId, info = {}) {
   const { prisma } = require("../config/database");
   const candidates = await prisma.member.findMany({ where: { sdt: { in: variants } }, select: { id: true, hoTen: true, zaloUserId: true } });
 
-  const token = await ZaloConfigRepo.getValidToken();
-  const say = (text) => token && _sendZaloMessage(zaloUserId, text, token);
-
   if (candidates.length === 1) {
     const m = candidates[0];
-    if (m.zaloUserId && m.zaloUserId !== zaloUserId) {
-      logger.warn(`user_submit_info [${zaloUserId}]: SĐT ${phone} thuộc nhân khẩu đã liên kết Zalo khác`);
-      await say("⚠️ Số điện thoại này đã được liên kết với một tài khoản Zalo khác. Vui lòng liên hệ UBND xã để được hỗ trợ.");
-      return;
-    }
+    if (m.zaloUserId && m.zaloUserId !== zaloUserId) return { status: "taken", phone };
     if (m.zaloUserId !== zaloUserId) await MemberRepo.update(m.id, { zaloUserId: zaloUserId });
     await ZaloFollowerRepo.setLink(zaloUserId, m.id);
-    logger.info(`Auto-link Zalo ${zaloUserId} -> member ${m.id} (${m.hoTen}) via user_submit_info`);
-    await say(`✅ Cảm ơn bạn! Đã liên kết tài khoản Zalo với hồ sơ nhân khẩu: ${m.hoTen}.`);
-  } else if (candidates.length === 0) {
-    logger.info(`user_submit_info [${zaloUserId}]: SĐT ${phone} chưa khớp nhân khẩu nào (đã lưu, chờ admin xử lý)`);
-    await say("✅ Cảm ơn bạn đã chia sẻ! Chúng tôi đã ghi nhận số điện thoại và sẽ liên kết hồ sơ trong thời gian sớm nhất.");
-  } else {
-    logger.info(`user_submit_info [${zaloUserId}]: SĐT ${phone} khớp ${candidates.length} nhân khẩu — cần admin chọn tay`);
-    await say("✅ Cảm ơn bạn đã chia sẻ! Cán bộ xã sẽ xác nhận và liên kết hồ sơ của bạn sớm.");
+    logger.info(`Auto-link Zalo ${zaloUserId} -> member ${m.id} (${m.hoTen}) via phone ${phone}`);
+    return { status: "linked", phone, member: m };
   }
+  return { status: candidates.length === 0 ? "saved" : "ambiguous", phone };
+}
+
+// Webhook user_submit_info / dân nhắn SĐT: liên kết + nhắn phản hồi cho dân
+async function handleUserSubmitInfo(zaloUserId, info = {}) {
+  const r = await _linkByPhone(zaloUserId, info.phone);
+  if (r.status === "invalid") { logger.warn(`user_submit_info [${zaloUserId}]: SĐT không hợp lệ "${info.phone}"`); return; }
+
+  const token = await ZaloConfigRepo.getValidToken();
+  const say = (text) => token && _sendZaloMessage(zaloUserId, text, token);
+  if (r.status === "linked") await say(`✅ Cảm ơn bạn! Đã liên kết tài khoản Zalo với hồ sơ nhân khẩu: ${r.member.hoTen}.`);
+  else if (r.status === "taken") await say("⚠️ Số điện thoại này đã được liên kết với một tài khoản Zalo khác. Vui lòng liên hệ UBND xã để được hỗ trợ.");
+  else if (r.status === "saved") await say("✅ Cảm ơn bạn đã chia sẻ! Chúng tôi đã ghi nhận số điện thoại và sẽ liên kết hồ sơ trong thời gian sớm nhất.");
+  else await say("✅ Cảm ơn bạn đã chia sẻ! Cán bộ xã sẽ xác nhận và liên kết hồ sơ của bạn sớm.");
 }
 
 async function _sendZaloMessage(toUserId, text, token) {
@@ -312,6 +314,60 @@ async function _zaloGet(url) {
   return res.data;
 }
 
+// ── Quét lịch sử hội thoại tìm SĐT dân từng nhắn → tự liên kết (chạy nền, im lặng) ──
+let _scanState = { running: false, scanned: 0, total: 0, phonesFound: 0, linked: 0, finishedAt: null };
+
+function getScanState() { return { ..._scanState }; }
+
+// Bắt SĐT trong nội dung tin nhắn (0xx/84xx/+84xx, cho phép cách/chấm giữa các số)
+function _extractPhones(text) {
+  const out = [];
+  const matches = String(text || "").match(/(?:\+?84|0)(?:[\s.\-]?\d){8,10}/g) || [];
+  for (const m of matches) {
+    const p = _normPhone(m);
+    if (p) out.push(p);
+  }
+  return out;
+}
+
+async function startScanConversations() {
+  if (_scanState.running) return { running: true };
+  _scanState = { running: true, scanned: 0, total: 0, phonesFound: 0, linked: 0, finishedAt: null };
+  _runScanConversations()
+    .catch((e) => logger.error(`scanConversations: ${e.message}`))
+    .finally(() => { _scanState.running = false; _scanState.finishedAt = new Date(); });
+  return { running: true };
+}
+
+async function _runScanConversations() {
+  const followers = await ZaloFollowerRepo.findAll();
+  const targets = followers.filter((f) => !f.linkedMemberId);
+  _scanState.total = targets.length;
+  logger.info(`scanConversations: bắt đầu quét ${targets.length} follower chưa liên kết`);
+
+  for (const f of targets) {
+    _scanState.scanned++;
+    try {
+      // user_id phải là SỐ không ngoặc kép (như getprofile); đọc 20 tin gần nhất
+      const data = encodeURIComponent(`{"user_id":${f.userId},"offset":0,"count":20}`);
+      const res = await _zaloGet(`https://openapi.zalo.me/v2.0/oa/conversation?data=${data}`);
+      if (res?.error !== 0) continue;
+      // src=1: tin do DÂN gửi; duyệt từ tin mới nhất, lấy SĐT đầu tiên hợp lệ
+      const userTexts = (res.data || []).filter((m) => String(m.src) === "1" && m.message).map((m) => m.message);
+      let phone = null;
+      for (const t of userTexts) { const ps = _extractPhones(t); if (ps.length) { phone = ps[0]; break; } }
+      if (!phone) continue;
+      _scanState.phonesFound++;
+      const r = await _linkByPhone(f.userId, phone); // im lặng — không nhắn dân
+      if (r.status === "linked") _scanState.linked++;
+    } catch (e) {
+      logger.warn(`scanConversations [${f.userId}]: ${e.message}`);
+    }
+    await new Promise((r) => setTimeout(r, 200)); // tránh rate-limit Zalo
+  }
+  logger.info(`scanConversations: xong — quét ${_scanState.scanned}, thấy SĐT ${_scanState.phonesFound}, liên kết ${_scanState.linked}`);
+}
+
 async function _fetchAllFollowerIds() {
   const ids = [];
   let offset = 0;
@@ -394,4 +450,4 @@ async function sendToFollowers(userIds, text, attachments = []) {
   return results;
 }
 
-module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers };
+module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState };
