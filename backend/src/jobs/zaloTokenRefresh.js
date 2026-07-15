@@ -2,9 +2,9 @@ const cron = require("node-cron");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const logger = require("../utils/logger");
 
-// Chạy mỗi ngày lúc 03:00 AM — kiểm tra và refresh nếu gần hết hạn
+// Chạy mỗi 6 giờ — kiểm tra và refresh nếu gần hết hạn (token Zalo chỉ sống ~25h)
 function startZaloTokenRefreshJob() {
-  cron.schedule("0 3 * * *", async () => {
+  cron.schedule("0 */6 * * *", async () => {
     logger.info("[ZaloTokenRefresh] Đang kiểm tra token...");
     try {
       const needs = await ZaloConfigRepo.needsRefresh();
@@ -23,7 +23,7 @@ function startZaloTokenRefreshJob() {
     }
   });
 
-  logger.info("[ZaloTokenRefresh] Đã lên lịch kiểm tra token lúc 03:00 AM hàng ngày");
+  logger.info("[ZaloTokenRefresh] Đã lên lịch kiểm tra token mỗi 6 giờ");
 }
 
 module.exports = { startZaloTokenRefreshJob };

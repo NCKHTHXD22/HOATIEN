@@ -141,12 +141,12 @@ router.get("/auth-url", authenticate, requireRole("SUPER_ADMIN"), (req, res) => 
 
 // GET /api/zalo/callback — Zalo redirect về đây sau khi admin cấp quyền
 router.get("/callback", async (req, res) => {
-  const { code, oa_access_token, refresh_token } = req.query;
+  const { code, oa_access_token, refresh_token, expires_in } = req.query;
 
   try {
     // Zalo v4 OA: đôi khi trả thẳng token (không dùng code)
     if (oa_access_token) {
-      await ZaloConfigRepo.saveTokens(oa_access_token, refresh_token || null);
+      await ZaloConfigRepo.saveTokens(oa_access_token, refresh_token || null, expires_in);
       logger.info("Zalo OA callback: token nhận trực tiếp, đã lưu Redis");
       return res.send(`<h2 style="font-family:sans-serif;color:green">✓ Zalo OA đã kết nối thành công!</h2><p>Bạn có thể đóng tab này.</p>`);
     }
@@ -178,7 +178,7 @@ router.get("/callback", async (req, res) => {
       return res.status(400).send(`<h2 style="color:red">Lỗi: ${data.message || "Không nhận được token"}</h2>`);
     }
 
-    await ZaloConfigRepo.saveTokens(data.access_token, data.refresh_token || null);
+    await ZaloConfigRepo.saveTokens(data.access_token, data.refresh_token || null, data.expires_in);
     logger.info("Zalo OA callback: đã đổi code lấy token thành công");
     res.send(`<h2 style="font-family:sans-serif;color:green">✓ Zalo OA đã kết nối thành công!</h2><p>Bạn có thể đóng tab này.</p>`);
   } catch (err) {
