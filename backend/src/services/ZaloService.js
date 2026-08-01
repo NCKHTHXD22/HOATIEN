@@ -435,25 +435,20 @@ function startSyncFollowers() {
 
 const isSyncing = () => _syncing;
 
-// ─── Tra cứu Zalo ID theo số điện thoại (Zalo OA API v3.0) ──────────────────
-// Kết quả:
-//   status = 'follower'     → có Zalo + đang follow OA → trả userId
-//   status = 'not_follower' → có Zalo nhưng chưa follow OA (chưa quan tâm)
-//   status = 'no_zalo'      → số điện thoại không dùng Zalo
-//   status = 'error'        → lỗi API / timeout
+// ─── Tra cứu Zalo ID theo số điện thoại (Zalo OA API v2.0) ──────────────────
 async function getProfileByPhone(phone) {
   try {
     const normalized = phone.replace(/\D/g, "");
-    const data = encodeURIComponent(JSON.stringify({ type: "phone", data: normalized }));
-    const result = await _zaloGet(`https://openapi.zalo.me/v3.0/oa/user/getprofile?data=${data}`);
+    // v2.0 hoạt động với mọi OA, không cần quyền đặc biệt
+    const data = encodeURIComponent(JSON.stringify({ phone: normalized }));
+    const result = await _zaloGet(`https://openapi.zalo.me/v2.0/oa/getprofile?data=${data}`);
     if (result?.error === 0 && result.data?.user_id) {
       return { userId: String(result.data.user_id), displayName: result.data.display_name || "", status: "follower" };
     }
-    // -205: user chưa follow OA (chưa quan tâm); -14: OA thiếu quyền nhưng user có Zalo
-    if (result?.error === -205 || result?.error === -14) {
+    // -213/-205/-14: có Zalo nhưng chưa follow OA
+    if ([-213, -205, -14].includes(result?.error)) {
       return { userId: null, status: "not_follower", errorCode: result.error };
     }
-    // -124 hoặc các lỗi khác: số không tồn tại trên Zalo
     return { userId: null, status: "no_zalo", errorCode: result?.error };
   } catch (e) {
     return { userId: null, status: "error", message: e.message };
