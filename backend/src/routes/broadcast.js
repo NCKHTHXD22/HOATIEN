@@ -127,6 +127,19 @@ router.delete("/followers/:userId/link", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Tự động liên kết nhân khẩu ↔ Zalo theo SĐT (gọi Zalo API v3 getprofile by phone)
+// Body: { villageId } — chỉ xử lý member chưa link, có SĐT, thuộc thôn đó
+router.post("/auto-link-by-phone", async (req, res, next) => {
+  try {
+    const { villageId } = req.body;
+    if (!villageId) return fail(res, "Thiếu villageId");
+    if (req.user.role === "ADMIN_VILLAGE" && req.user.villageIds?.length && !req.user.villageIds.includes(villageId))
+      return fail(res, "Không có quyền trên thôn này", 403);
+    const results = await ZaloService.autoLinkByVillagePhones(villageId);
+    ok(res, results);
+  } catch (err) { next(err); }
+});
+
 // Follower đã theo dõi OA và thuộc 1 thôn cụ thể (khớp qua Member.zaloUserId)
 router.get("/followers/by-village/:villageId", async (req, res, next) => {
   try {

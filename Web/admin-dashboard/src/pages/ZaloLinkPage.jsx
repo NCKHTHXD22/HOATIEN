@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
-  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle, Phone, UserSearch, MessagesSquare,
+  Search, Link2, Link2Off, Loader2, Users, CheckCircle2, XCircle, Phone, UserSearch,
+  MessagesSquare, Zap, MapPin, AlertCircle,
 } from 'lucide-react'
 
 function useDebounce(value, delay = 300) {
@@ -315,6 +316,178 @@ function PhoneLookupPanel({ followers }) {
   )
 }
 
+function SummaryCard({ icon, label, count, color }) {
+  const colors = {
+    emerald: 'bg-emerald-50 border-emerald-100 text-emerald-800',
+    amber:   'bg-amber-50 border-amber-100 text-amber-800',
+    red:     'bg-red-50 border-red-100 text-red-800',
+    slate:   'bg-slate-50 border-slate-200 text-slate-700',
+  }
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${colors[color]}`}>
+      {icon}
+      <div>
+        <p className="text-xl font-bold leading-none">{count}</p>
+        <p className="text-xs font-medium mt-0.5 opacity-80">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+function ResultGroup({ color, title, items }) {
+  const [open, setOpen] = useState(false)
+  const colors = {
+    emerald: 'border-emerald-100 bg-emerald-50/40',
+    amber:   'border-amber-100 bg-amber-50/40',
+    red:     'border-red-100 bg-red-50/40',
+    slate:   'border-slate-200 bg-slate-50/40',
+  }
+  const titleColors = {
+    emerald: 'text-emerald-800',
+    amber:   'text-amber-800',
+    red:     'text-red-700',
+    slate:   'text-slate-700',
+  }
+  return (
+    <div className={`rounded-xl border overflow-hidden ${colors[color]}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold ${titleColors[color]}`}
+      >
+        <span>{title}</span>
+        <span className="text-base leading-none">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="border-t border-slate-100 divide-y divide-slate-100 max-h-64 overflow-y-auto bg-white">
+          {items.map((item, i) => (
+            <div key={i} className="px-4 py-2">
+              <p className="text-sm font-semibold text-slate-800">{item.primary}</p>
+              {item.secondary && <p className="text-xs text-slate-400 font-mono">{item.secondary}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AutoLinkPanel() {
+  const queryClient = useQueryClient()
+  const [villageId, setVillageId] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [results, setResults] = useState(null)
+
+  const { data: villages } = useQuery({
+    queryKey: ['villages'],
+    queryFn: () => api.get('/api/villages').then(r => r.data?.data ?? []),
+    staleTime: 300000,
+  })
+
+  const handleAutoLink = async () => {
+    if (!villageId) return
+    if (!window.confirm(
+      'Tự động kiểm tra SĐT và liên kết Zalo cho toàn bộ nhân khẩu thôn đã chọn?\n\n' +
+      'Quá trình có thể mất vài phút tuỳ số lượng.'
+    )) return
+    setLoading(true)
+    setResults(null)
+    try {
+      const r = await api.post('/api/broadcast/auto-link-by-phone', { villageId })
+      const data = r.data?.data || r.data
+      setResults(data)
+      queryClient.invalidateQueries({ queryKey: ['zalo-followers-linked'] })
+      toast.success(`Hoàn tất! Đã liên kết ${data?.linked?.length ?? 0} nhân khẩu.`)
+    } catch (e) {
+      toast.error(e.response?.data?.message || e.response?.data?.error || 'Lỗi liên kết tự động')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3.5 flex items-start gap-3">
+        <Zap className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-blue-800">Liên kết tự động theo số điện thoại</p>
+          <p className="text-xs text-blue-600 leading-relaxed">
+            Hệ thống lấy SĐT từ hồ sơ hộ khẩu, tra Zalo OA API v3 để tìm Zalo ID,
+            rồi tự động liên kết nhân khẩu ↔ follower. Chỉ xử lý nhân khẩu&nbsp;
+            <strong>chưa liên kết</strong> và <strong>có SĐT</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px] space-y-1.5">
+            <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5" /> Chọn thôn cần liên kết
+            </label>
+            <select
+              value={villageId}
+              onChange={e => setVillageId(e.target.value)}
+              disabled={loading}
+              className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 disabled:opacity-50"
+            >
+              <option value="">-- Chọn thôn --</option>
+              {(villages ?? []).map(v => (
+                <option key={v.id} value={v.id}>{v.ten}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={handleAutoLink}
+            disabled={!villageId || loading}
+            className="flex items-center gap-2 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</>
+              : <><Zap className="h-4 w-4" /> Bắt đầu kiểm tra &amp; Liên kết</>}
+          </button>
+        </div>
+
+        {loading && (
+          <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-200">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+            Đang tra cứu Zalo theo từng SĐT — vui lòng đợi (khoảng 150ms/người)...
+          </div>
+        )}
+      </div>
+
+      {results && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <SummaryCard icon={<CheckCircle2 className="h-5 w-5 text-emerald-500" />} label="Đã liên kết"       count={results.linked?.length      ?? 0} color="emerald" />
+            <SummaryCard icon={<AlertCircle  className="h-5 w-5 text-amber-500"   />} label="Chưa follow OA"   count={results.notFollower?.length  ?? 0} color="amber"   />
+            <SummaryCard icon={<XCircle      className="h-5 w-5 text-red-400"     />} label="Không dùng Zalo"  count={results.noZalo?.length       ?? 0} color="red"     />
+            <SummaryCard icon={<AlertCircle  className="h-5 w-5 text-slate-400"   />} label="Lỗi"              count={results.errors?.length       ?? 0} color="slate"   />
+          </div>
+
+          {results.linked?.length > 0 && (
+            <ResultGroup color="emerald" title={`✅ Đã liên kết thành công (${results.linked.length})`}
+              items={results.linked.map(m => ({ primary: m.hoTen, secondary: `${m.sdt} · Zalo: ${m.displayName || m.zaloId}` }))} />
+          )}
+          {results.notFollower?.length > 0 && (
+            <ResultGroup color="amber" title={`⚠️ Chưa follow OA Zalo (${results.notFollower.length})`}
+              items={results.notFollower.map(m => ({ primary: m.hoTen, secondary: m.sdt }))} />
+          )}
+          {results.noZalo?.length > 0 && (
+            <ResultGroup color="red" title={`❌ Không tìm thấy tài khoản Zalo (${results.noZalo.length})`}
+              items={results.noZalo.map(m => ({ primary: m.hoTen, secondary: m.sdt }))} />
+          )}
+          {results.errors?.length > 0 && (
+            <ResultGroup color="slate" title={`⚠️ Lỗi (${results.errors.length})`}
+              items={results.errors.map(m => ({ primary: m.hoTen, secondary: m.sdt ? `${m.sdt} · ${m.reason}` : m.reason }))} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ZaloLinkPage() {
   const queryClient = useQueryClient()
   const [mode, setMode] = useState('followers')
@@ -476,7 +649,7 @@ export default function ZaloLinkPage() {
       </div>
 
       {/* Chuyển chế độ */}
-      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit flex-wrap">
         <button
           type="button"
           onClick={() => setMode('followers')}
@@ -491,12 +664,20 @@ export default function ZaloLinkPage() {
         >
           <UserSearch className="h-3.5 w-3.5" /> Tra cứu theo SĐT
         </button>
+        <button
+          type="button"
+          onClick={() => setMode('autolink')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${mode === 'autolink' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <Zap className="h-3.5 w-3.5" /> Liên kết tự động
+        </button>
       </div>
 
-      {mode === 'lookup' ? (
+      {mode === 'autolink' ? (
+        <AutoLinkPanel />
+      ) : mode === 'lookup' ? (
         <PhoneLookupPanel followers={followers} />
-      ) : (
-      <>
+      ) : (<>
       {/* Stats card */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-2.5">
         <div className="flex items-center justify-between">

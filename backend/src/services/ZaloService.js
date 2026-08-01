@@ -435,6 +435,77 @@ function startSyncFollowers() {
 
 const isSyncing = () => _syncing;
 
+// ─── Tra cứu Zalo ID theo số điện thoại (Zalo OA API v3.0) ──────────────────
+// Kết quả:
+//   status = 'follower'     → có Zalo + đang follow OA → trả userId
+//   status = 'not_follower' → có Zalo nhưng chưa follow OA (chưa quan tâm)
+//   status = 'no_zalo'      → số điện thoại không dùng Zalo
+//   status = 'error'        → lỗi API / timeout
+async function getProfileByPhone(phone) {
+  try {
+    const normalized = phone.replace(/\D/g, "");
+    const data = encodeURIComponent(JSON.stringify({ type: "phone", data: normalized }));
+    const result = await _zaloGet(`https://openapi.zalo.me/v3.0/oa/user/getprofile?data=${data}`);
+    if (result?.error === 0 && result.data?.user_id) {
+      return { userId: String(result.data.user_id), displayName: result.data.display_name || "", status: "follower" };
+    }
+    // -205: user chưa follow OA (chưa quan tâm); -14: OA thiếu quyền nhưng user có Zalo
+    if (result?.error === -205 || result?.error === -14) {
+      return { userId: null, status: "not_follower", errorCode: result.error };
+    }
+    // -124 hoặc các lỗi khác: số không tồn tại trên Zalo
+    return { userId: null, status: "no_zalo", errorCode: result?.error };
+  } catch (e) {
+    return { userId: null, status: "error", message: e.message };
+  }
+}
+
+// Tự động liên kết nhân khẩu ↔ Zalo theo SĐT trong 1 thôn.
+// Chỉ xử lý member chưa có zaloUserId, có SĐT, thuộc thôn villageId.
+async function autoLinkByVillagePhones(villageId) {
+  const { prisma } = require("../config/database");
+
+  const members = await prisma.member.findMany({
+    where: {
+      trangThai: "ACTIVE",
+      sdt: { not: null },
+      zaloUserId: null,
+      household: { villageId },
+    },
+    select: { id: true, hoTen: true, sdt: true },
+  });
+
+  const results = { linked: [], notFollower: [], noZalo: [], errors: [], total: members.length };
+
+  for (const member of members) {
+    const r = await getProfileByPhone(member.sdt);
+
+    if (r.status === "follower" && r.userId) {
+      // Kiểm tra userId chưa bị member khác chiếm
+      const conflict = await prisma.member.findFirst({ where: { zaloUserId: r.userId } });
+      if (conflict) {
+        results.errors.push({ hoTen: member.hoTen, sdt: member.sdt, reason: `Zalo ID đã liên kết với ${conflict.hoTen}` });
+      } else {
+        await Promise.all([
+          ZaloFollowerRepo.setLink(r.userId, member.id),
+          prisma.member.update({ where: { id: member.id }, data: { zaloUserId: r.userId } }),
+        ]);
+        results.linked.push({ hoTen: member.hoTen, sdt: member.sdt, zaloId: r.userId, displayName: r.displayName });
+      }
+    } else if (r.status === "not_follower") {
+      results.notFollower.push({ hoTen: member.hoTen, sdt: member.sdt });
+    } else if (r.status === "no_zalo") {
+      results.noZalo.push({ hoTen: member.hoTen, sdt: member.sdt });
+    } else {
+      results.errors.push({ hoTen: member.hoTen, sdt: member.sdt, reason: r.message || `API lỗi ${r.errorCode}` });
+    }
+
+    await new Promise((res) => setTimeout(res, 150)); // tránh rate limit Zalo
+  }
+
+  return results;
+}
+
 // Gửi 1 tin tới nhiều follower (theo user_id). Trả về kết quả từng người.
 async function sendToFollowers(userIds, text, attachments = []) {
   const results = [];
@@ -450,4 +521,4 @@ async function sendToFollowers(userIds, text, attachments = []) {
   return results;
 }
 
-module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState };
+module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState, getProfileByPhone, autoLinkByVillagePhones };
