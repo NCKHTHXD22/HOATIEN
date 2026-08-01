@@ -127,16 +127,24 @@ router.delete("/followers/:userId/link", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Tự động liên kết nhân khẩu ↔ Zalo theo SĐT (gọi Zalo API v3 getprofile by phone)
-// Body: { villageId } — chỉ xử lý member chưa link, có SĐT, thuộc thôn đó
+// Khởi động job liên kết tự động (chạy nền, trả jobId ngay)
 router.post("/auto-link-by-phone", async (req, res, next) => {
   try {
     const { villageId } = req.body;
     if (!villageId) return fail(res, "Thiếu villageId");
     if (req.user.role === "ADMIN_VILLAGE" && req.user.villageIds?.length && !req.user.villageIds.includes(villageId))
       return fail(res, "Không có quyền trên thôn này", 403);
-    const results = await ZaloService.autoLinkByVillagePhones(villageId);
-    ok(res, results);
+    const jobId = ZaloService.startAutoLink(villageId);
+    ok(res, { jobId, status: "started" });
+  } catch (err) { next(err); }
+});
+
+// Poll tiến độ job liên kết tự động
+router.get("/auto-link-status/:jobId", async (req, res, next) => {
+  try {
+    const job = ZaloService.getAutoLinkJob(req.params.jobId);
+    if (!job) return fail(res, "Không tìm thấy job", 404);
+    ok(res, job);
   } catch (err) { next(err); }
 });
 

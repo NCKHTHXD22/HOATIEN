@@ -460,50 +460,68 @@ async function getProfileByPhone(phone) {
   }
 }
 
-// Tự động liên kết nhân khẩu ↔ Zalo theo SĐT trong 1 thôn.
-// Chỉ xử lý member chưa có zaloUserId, có SĐT, thuộc thôn villageId.
-async function autoLinkByVillagePhones(villageId) {
+// ─── Auto-link background jobs (in-memory, đủ cho 1 server process) ──────────
+const _autoLinkJobs = new Map();
+
+async function _runAutoLink(jobId, villageId) {
+  const job = _autoLinkJobs.get(jobId);
   const { prisma } = require("../config/database");
+  try {
+    const members = await prisma.member.findMany({
+      where: { trangThai: "ACTIVE", sdt: { not: null }, zaloUserId: null, household: { villageId } },
+      select: { id: true, hoTen: true, sdt: true },
+    });
+    job.total = members.length;
+    job.status = "running";
+    const results = { linked: [], notFollower: [], noZalo: [], errors: [] };
 
-  const members = await prisma.member.findMany({
-    where: {
-      trangThai: "ACTIVE",
-      sdt: { not: null },
-      zaloUserId: null,
-      household: { villageId },
-    },
-    select: { id: true, hoTen: true, sdt: true },
-  });
-
-  const results = { linked: [], notFollower: [], noZalo: [], errors: [], total: members.length };
-
-  for (const member of members) {
-    const r = await getProfileByPhone(member.sdt);
-
-    if (r.status === "follower" && r.userId) {
-      // Kiểm tra userId chưa bị member khác chiếm
-      const conflict = await prisma.member.findFirst({ where: { zaloUserId: r.userId } });
-      if (conflict) {
-        results.errors.push({ hoTen: member.hoTen, sdt: member.sdt, reason: `Zalo ID đã liên kết với ${conflict.hoTen}` });
+    for (const member of members) {
+      const r = await getProfileByPhone(member.sdt);
+      if (r.status === "follower" && r.userId) {
+        const conflict = await prisma.member.findFirst({ where: { zaloUserId: r.userId } });
+        if (conflict) {
+          results.errors.push({ hoTen: member.hoTen, sdt: member.sdt, reason: `Zalo ID đã liên kết với ${conflict.hoTen}` });
+        } else {
+          await Promise.all([
+            ZaloFollowerRepo.setLink(r.userId, member.id),
+            prisma.member.update({ where: { id: member.id }, data: { zaloUserId: r.userId } }),
+          ]);
+          results.linked.push({ hoTen: member.hoTen, sdt: member.sdt, zaloId: r.userId, displayName: r.displayName });
+        }
+      } else if (r.status === "not_follower") {
+        results.notFollower.push({ hoTen: member.hoTen, sdt: member.sdt });
+      } else if (r.status === "no_zalo") {
+        results.noZalo.push({ hoTen: member.hoTen, sdt: member.sdt });
       } else {
-        await Promise.all([
-          ZaloFollowerRepo.setLink(r.userId, member.id),
-          prisma.member.update({ where: { id: member.id }, data: { zaloUserId: r.userId } }),
-        ]);
-        results.linked.push({ hoTen: member.hoTen, sdt: member.sdt, zaloId: r.userId, displayName: r.displayName });
+        results.errors.push({ hoTen: member.hoTen, sdt: member.sdt, reason: r.message || `API lỗi ${r.errorCode}` });
       }
-    } else if (r.status === "not_follower") {
-      results.notFollower.push({ hoTen: member.hoTen, sdt: member.sdt });
-    } else if (r.status === "no_zalo") {
-      results.noZalo.push({ hoTen: member.hoTen, sdt: member.sdt });
-    } else {
-      results.errors.push({ hoTen: member.hoTen, sdt: member.sdt, reason: r.message || `API lỗi ${r.errorCode}` });
+      job.processed += 1;
+      job.results = results;
+      await new Promise((res) => setTimeout(res, 150));
     }
-
-    await new Promise((res) => setTimeout(res, 150)); // tránh rate limit Zalo
+    job.status = "done";
+  } catch (e) {
+    job.status = "error";
+    job.error = e.message;
+    logger.error(`autoLinkByVillage job ${jobId}: ${e.message}`);
   }
+}
 
-  return results;
+function startAutoLink(villageId) {
+  const jobId = Date.now().toString();
+  const job = { status: "starting", total: 0, processed: 0, results: null, error: null };
+  _autoLinkJobs.set(jobId, job);
+  // Giữ tối đa 20 job, xoá cũ nhất
+  if (_autoLinkJobs.size > 20) {
+    const firstKey = _autoLinkJobs.keys().next().value;
+    _autoLinkJobs.delete(firstKey);
+  }
+  _runAutoLink(jobId, villageId);
+  return jobId;
+}
+
+function getAutoLinkJob(jobId) {
+  return _autoLinkJobs.get(jobId) || null;
 }
 
 // Gửi 1 tin tới nhiều follower (theo user_id). Trả về kết quả từng người.
@@ -521,4 +539,4 @@ async function sendToFollowers(userIds, text, attachments = []) {
   return results;
 }
 
-module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState, getProfileByPhone, autoLinkByVillagePhones };
+module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState, getProfileByPhone, startAutoLink, getAutoLinkJob };
