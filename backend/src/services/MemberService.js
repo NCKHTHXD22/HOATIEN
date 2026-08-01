@@ -1,3 +1,4 @@
+const { prisma } = require("../config/database");
 const MemberRepo = require("../repositories/pg/MemberRepo");
 const AuditService = require("./AuditService");
 const SearchService = require("./SearchService");
@@ -49,7 +50,12 @@ async function update(id, data, performedBy) {
 async function remove(id, performedBy) {
   const old = await MemberRepo.findById(id);
   if (!old) throw new Error("Không tìm thấy thành viên");
-  await MemberRepo.remove(id);
+  // notification_sends có khóa ngoại RESTRICT nên phải xóa trước khi xóa Member
+  // (recipient_group_members = Cascade, notification_recipients = SetNull → tự xử lý)
+  await prisma.$transaction(async (tx) => {
+    await tx.notificationSend.deleteMany({ where: { memberId: id } });
+    await tx.member.delete({ where: { id } });
+  });
   AuditService.log({ entityType: "member", entityId: id, action: "DELETE", oldData: old, performedBy });
   SearchService.syncIndex(old.householdId).catch(() => {});
   ReportCacheRepo.invalidateAll().catch(() => {});
