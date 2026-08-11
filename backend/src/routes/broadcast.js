@@ -617,15 +617,19 @@ router.delete("/posts/:id", async (req, res) => {
   catch (e) { fail(res, e.message, 500); }
 });
 
-// Zalo article/getslice giới hạn limit tối đa = 10 → phân trang gom hết (cap 60/loại)
-async function fetchAllArticles(type, cap = 60) {
+// Zalo article/getslice giới hạn limit tối đa = 10 → gom hết bằng cách tải
+// song song từng cụm 6 trang (60 bài), dừng khi hết. cap 400 phòng OA nhiều bài.
+async function fetchAllArticles(type, cap = 400) {
   const out = [];
-  for (let offset = 0; offset < cap; offset += 10) {
-    let batch;
-    try { batch = await getArticleSlice(type, offset, 10); }
-    catch { break; }
-    out.push(...batch.map((a) => ({ ...a, type })));
-    if (batch.length < 10) break;
+  for (let base = 0; base < cap; base += 60) {
+    const offs = [];
+    for (let o = base; o < base + 60 && o < cap; o += 10) offs.push(o);
+    const pages = await Promise.all(
+      offs.map((o) => getArticleSlice(type, o, 10).then((m) => m.map((a) => ({ ...a, type }))).catch(() => []))
+    );
+    let short = false;
+    for (const p of pages) { out.push(...p); if (p.length < 10) short = true; }
+    if (short) break;
   }
   return out;
 }

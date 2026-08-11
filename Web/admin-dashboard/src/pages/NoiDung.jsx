@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
@@ -68,6 +68,11 @@ function ZaloArticles() {
     })
   }, [data, q, status, type, from, to])
 
+  const [page, setPage] = useState(1)
+  const perPage = 10
+  useEffect(() => { setPage(1) }, [q, status, type, from, to])
+  const paged = items.slice((page - 1) * perPage, page * perPage)
+
   const exportCsv = () => {
     const head = ['STT', 'Thời gian xuất bản', 'Tên broadcast', 'Loại', 'Lượt xem', 'Chia sẻ', 'Thích', 'Bình luận', 'Trạng thái']
     const rows = items.map((a, i) => [i + 1, fmt(a.createDate), `"${(a.title || '').replace(/"/g, '""')}"`, a.type === 'video' ? 'Video' : 'Bài viết', a.totalView, a.totalShare, a.totalLike, a.totalComment, ZALO_ST[a.status]?.label || a.status])
@@ -122,11 +127,11 @@ function ZaloArticles() {
                 <tr><td colSpan={9} className="px-4 py-16 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></td></tr>
               ) : items.length === 0 ? (
                 <tr><td colSpan={9} className="px-4 py-16 text-center text-slate-400">Không có broadcast nào trên OA</td></tr>
-              ) : items.map((a, i) => {
+              ) : paged.map((a, i) => {
                 const st = ZALO_ST[a.status] || { label: a.status, cls: 'bg-slate-100 text-slate-500' }
                 return (
                   <tr key={a.id} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-3 text-slate-400">{i + 1}</td>
+                    <td className="px-4 py-3 text-slate-400">{(page - 1) * perPage + i + 1}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmt(a.createDate)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -153,8 +158,9 @@ function ZaloArticles() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2.5 border-t border-slate-50 text-[11px] text-slate-400">Dữ liệu thật lấy trực tiếp từ Zalo OA Manager · {items.length} broadcast</div>
+        <Pager page={page} perPage={perPage} total={items.length} onPage={setPage} />
       </div>
+      <p className="text-[11px] text-slate-400">Dữ liệu thật lấy trực tiếp từ Zalo OA Manager.</p>
     </>
   )
 }
@@ -308,6 +314,10 @@ function BroadcastSetup({ onCompose, onSent }) {
     const s = q.toLowerCase()
     return (data?.items ?? []).filter((a) => a.type === type && (!s || a.title?.toLowerCase().includes(s)))
   }, [data, type, q])
+  const [page, setPage] = useState(1)
+  const perPage = 10
+  useEffect(() => { setPage(1) }, [type, q])
+  const paged = items.slice((page - 1) * perPage, page * perPage)
   const filteredFollowers = useMemo(() => {
     const s = fSearch.toLowerCase()
     return followers.filter((f) => !s || f.display_name?.toLowerCase().includes(s)).slice(0, 100)
@@ -384,11 +394,11 @@ function BroadcastSetup({ onCompose, onSent }) {
                     <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></td></tr>
                   ) : items.length === 0 ? (
                     <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-400">Không có {type === 'video' ? 'video' : 'bài viết'} nào</td></tr>
-                  ) : items.map((a, i) => {
+                  ) : paged.map((a, i) => {
                     const sel = isSel(a.id)
                     return (
                       <tr key={a.id} className={`hover:bg-slate-50/60 ${sel ? 'bg-blue-50/40' : ''}`}>
-                        <td className="px-4 py-3 text-slate-400">{i + 1}</td>
+                        <td className="px-4 py-3 text-slate-400">{(page - 1) * perPage + i + 1}</td>
                         <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmt(a.createDate)}</td>
                         <td className="px-4 py-3">
                           {a.thumb ? <img src={a.thumb} alt="" className="h-9 w-12 rounded object-cover border border-slate-100" /> : <div className="h-9 w-12 rounded bg-slate-100" />}
@@ -407,6 +417,7 @@ function BroadcastSetup({ onCompose, onSent }) {
                 </tbody>
               </table>
             </div>
+            <Pager page={page} perPage={perPage} total={items.length} onPage={setPage} />
           </div>
         </div>
 
@@ -660,6 +671,22 @@ function Field({ label, children }) {
     <div>
       <label className="block text-xs font-semibold text-slate-500 mb-1.5">{label}</label>
       {children}
+    </div>
+  )
+}
+
+function Pager({ page, perPage, total, onPage }) {
+  const totalPages = Math.max(1, Math.ceil(total / perPage))
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-50 text-xs text-slate-500">
+      <span>{total} mục · {perPage}/trang</span>
+      {totalPages > 1 && (
+        <div className="flex items-center gap-1">
+          <button className="h-7 w-7 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40" disabled={page <= 1} onClick={() => onPage(page - 1)}>‹</button>
+          <span className="px-2 font-medium text-slate-600">{page}/{totalPages}</span>
+          <button className="h-7 w-7 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>›</button>
+        </div>
+      )}
     </div>
   )
 }
