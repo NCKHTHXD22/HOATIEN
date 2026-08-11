@@ -421,7 +421,8 @@ function BroadcastSetup({ onCompose, onSent }) {
           </div>
         </div>
 
-        {/* Panel "Giao diện" bên phải */}
+        {/* Panel "Giao diện" bên phải — chỉ hiện khi đã chọn ít nhất 1 bài */}
+        {selected.length > 0 && (
         <div className="lg:w-80 shrink-0">
           <div className="sticky top-4 bg-white rounded-xl border border-slate-200 p-4 space-y-3">
             <p className="text-sm font-bold text-slate-700">Giao diện</p>
@@ -481,6 +482,7 @@ function BroadcastSetup({ onCompose, onSent }) {
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   )
