@@ -8,6 +8,7 @@ router.use("/movements",  require("./movement.routes"));
 router.use("/reports",    require("./report.routes"));
 router.use("/zalo",       require("./zalo.routes"));
 router.use("/notify",     require("./notification.routes"));
+router.use("/broadcast",  require("./broadcastPublic.routes")); // public /click/:id — PHẢI trước router có auth
 router.use("/broadcast",  require("./broadcast"));
 router.use("/feedbacks",  require("./feedback.routes"));
 router.use("/categories", require("./category.routes"));

@@ -14,7 +14,10 @@ const zaloGmf = require("../utils/zaloGmf");
 const BroadcastLog = require("../models/mongo/BroadcastLog");
 const ScheduledBroadcast = require("../models/mongo/ScheduledBroadcast");
 const { sendToUsers, getJob } = require("../services/broadcastService");
+const { sendBroadcastPost, getJob: getPostJob } = require("../services/broadcastPostService");
+const Broadcast = require("../models/mongo/Broadcast");
 const { uploadImageToZalo, uploadFileToZalo } = require("../utils/zaloBroadcast");
+const { uploadFromBuffer } = require("../utils/cloudinaryUpload");
 const env = require("../config/env");
 const { prisma } = require("../config/database");
 
@@ -528,6 +531,90 @@ router.delete("/schedule/:id", async (req, res, next) => {
     await doc.save();
     res.json({ ok: true, success: true });
   } catch (err) { next(err); }
+});
+
+// ── "Nội dung" — Broadcast kiểu Zalo OA Manager ────────────────────
+// Upload ảnh: vừa Cloudinary (thumbnail URL cho bảng) vừa Zalo (attachment_id để gửi trong tin)
+router.post("/posts/upload-image", (req, res) => {
+  const upload = makeUpload("bcpost", {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_, file, cb) => (file.mimetype.startsWith("image/") ? cb(null, true) : cb(new Error("Chỉ nhận ảnh"))),
+  }).single("image");
+  upload(req, res, async (err) => {
+    if (err) return fail(res, err.message);
+    if (!req.file) return fail(res, "Không có ảnh");
+    try {
+      const [imageAttachmentId, thumbnail] = await Promise.all([
+        uploadImageToZalo(req.file.path),
+        uploadFromBuffer(fs.readFileSync(req.file.path), `bcpost_${Date.now()}`),
+      ]);
+      fs.unlink(req.file.path, () => {});
+      ok(res, { imageAttachmentId, thumbnail });
+    } catch (e) {
+      fs.unlink(req.file.path, () => {});
+      fail(res, e.message, 500);
+    }
+  });
+});
+
+// Tạo broadcast (gửi nền) — gửi tới follower (userIds) và/hoặc nhóm Zalo (groupIds)
+router.post("/posts", requireSendPermission(), async (req, res, next) => {
+  try {
+    const { name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, userIds = [], groupIds = [] } = req.body;
+    if (!name?.trim()) return fail(res, "Cần tên broadcast");
+    if (!userIds.length && !groupIds.length) return fail(res, "Cần chọn đối tượng nhận (follower hoặc nhóm)");
+    if (!content?.trim() && !imageAttachmentId && !linkUrl) return fail(res, "Cần nội dung, ảnh hoặc link");
+    const r = await sendBroadcastPost({ name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, userIds, groupIds, createdBy: req.user?.id });
+    ok(res, { ...r, total: userIds.length + groupIds.length });
+  } catch (err) { next(err); }
+});
+
+// Tiến độ job tạo broadcast
+router.get("/posts/status/:jobId", (req, res) => {
+  const job = getPostJob(req.params.jobId);
+  if (!job) return fail(res, "Không tìm thấy job", 404);
+  res.json(job);
+});
+
+// Xuất thống kê CSV
+router.get("/posts/export", async (req, res, next) => {
+  try {
+    const docs = await Broadcast.find().sort({ publishedAt: -1 }).limit(2000).lean();
+    const label = (s) => (s === "success" ? "Thành công" : s === "failed" ? "Không gửi được" : "Đang gửi");
+    const rows = [["STT", "Thời gian xuất bản", "Tên broadcast", "Đã gửi", "Lượt xem", "Trạng thái"]];
+    docs.forEach((d, i) => rows.push([i + 1, new Date(d.publishedAt).toLocaleString("vi-VN"), d.name || "", d.sent, d.views, label(d.status)]));
+    const csv = "﻿" + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="broadcast-thong-ke.csv"');
+    res.send(csv);
+  } catch (err) { next(err); }
+});
+
+// Danh sách broadcast (lọc tên/trạng thái/thời gian) cho bảng Quản lý
+router.get("/posts", async (req, res, next) => {
+  try {
+    const { q, status, from, to, page = 1 } = req.query;
+    const limit = 20;
+    const skip = (parseInt(page) - 1) * limit;
+    const filter = {};
+    if (q) filter.name = { $regex: String(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    if (status) filter.status = status;
+    if (from || to) {
+      filter.publishedAt = {};
+      if (from) filter.publishedAt.$gte = new Date(from);
+      if (to) filter.publishedAt.$lte = new Date(String(to) + "T23:59:59");
+    }
+    const [items, total] = await Promise.all([
+      Broadcast.find(filter).sort({ publishedAt: -1 }).skip(skip).limit(limit).lean(),
+      Broadcast.countDocuments(filter),
+    ]);
+    ok(res, { items, total, page: parseInt(page), totalPages: Math.ceil(total / limit) });
+  } catch (err) { next(err); }
+});
+
+router.delete("/posts/:id", async (req, res) => {
+  try { await Broadcast.findByIdAndDelete(req.params.id); ok(res, { ok: true }); }
+  catch (e) { fail(res, e.message, 500); }
 });
 
 module.exports = router;
