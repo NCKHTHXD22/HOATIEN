@@ -240,8 +240,13 @@ router.post("/groups/create-zalo", requireSendPermission(), async (req, res, nex
     if (!name || !name.trim()) return fail(res, "Cần tên nhóm");
     if (!Array.isArray(members) || members.length === 0) return fail(res, "Cần ít nhất 1 thành viên ban đầu (chuẩn Zalo)");
     const memberIds = members.map((m) => m.userId || m.zaloUserId).filter(Boolean);
+    // Tạo nhóm với 50 người đầu (giới hạn body 3000 ký tự của Zalo)
     const groupId = await zaloGmf.createZaloGroup(name.trim(), memberIds, name.trim());
     if (!groupId) return fail(res, "Zalo không trả về group_id", 500);
+    // Add thêm phần còn lại (nếu có) sau khi nhóm đã tạo thành công
+    if (memberIds.length > 50) {
+      await zaloGmf.addMembersToGroup(groupId, memberIds.slice(50)).catch(() => {});
+    }
     await ZaloGroup.findOneAndUpdate(
       { groupId: String(groupId) },
       { $set: { name: name.trim(), icon: icon || "📋" } },

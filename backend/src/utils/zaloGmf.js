@@ -37,6 +37,8 @@ async function getGroupMembersV3(groupId) {
 }
 
 // Tạo nhóm Zalo từ danh sách thành viên ban đầu. ZALO_ASSET_ID mặc định = ZALO_APP_ID.
+// Zalo giới hạn body 3000 ký tự → chỉ gửi 50 user đầu; dùng addMembersToGroup cho phần còn lại.
+const CREATE_BATCH = 50;
 async function createZaloGroup(name, memberIds, description = "") {
   const assetId = process.env.ZALO_ASSET_ID || env.ZALO_APP_ID;
   if (!assetId) throw new Error("Thiếu ZALO_ASSET_ID/ZALO_APP_ID trong .env");
@@ -44,10 +46,33 @@ async function createZaloGroup(name, memberIds, description = "") {
     group_name: String(name),
     group_description: String(description || name),
     asset_id: String(assetId),
-    member_user_ids: memberIds.map(String),
+    member_user_ids: memberIds.slice(0, CREATE_BATCH).map(String),
   });
   if (data?.error !== 0) throw new Error(`Zalo error ${data?.error}: ${data?.message}`);
   return data?.data?.group_id;
+}
+
+// Thêm thành viên vào nhóm đã tồn tại (50 người/lần để tránh giới hạn 3000 ký tự)
+const ADD_BATCH = 50;
+async function addMembersToGroup(groupId, memberIds) {
+  const results = { added: 0, failed: 0, errors: [] };
+  for (let i = 0; i < memberIds.length; i += ADD_BATCH) {
+    const batch = memberIds.slice(i, i + ADD_BATCH).map(String);
+    const data = await _post("https://openapi.zalo.me/v3.0/oa/group/invitemember", {
+      group_id: String(groupId),
+      member_user_ids: batch,
+    });
+    if (data?.error === 0) {
+      results.added += batch.length;
+    } else {
+      results.failed += batch.length;
+      results.errors.push(`batch ${i / ADD_BATCH + 1}: ${data?.error} ${data?.message}`);
+    }
+    if (i + ADD_BATCH < memberIds.length) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+  return results;
 }
 
 async function deleteZaloGroup(groupId) {
@@ -87,6 +112,7 @@ module.exports = {
   getGroupsOfOA,
   getGroupMembersV3,
   createZaloGroup,
+  addMembersToGroup,
   deleteZaloGroup,
   getPendingGroupMembers,
   acceptGroupJoinRequest,
