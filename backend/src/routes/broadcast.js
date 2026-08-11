@@ -617,14 +617,25 @@ router.delete("/posts/:id", async (req, res) => {
   catch (e) { fail(res, e.message, 500); }
 });
 
+// Zalo article/getslice giới hạn limit tối đa = 10 → phân trang gom hết (cap 60/loại)
+async function fetchAllArticles(type, cap = 60) {
+  const out = [];
+  for (let offset = 0; offset < cap; offset += 10) {
+    let batch;
+    try { batch = await getArticleSlice(type, offset, 10); }
+    catch { break; }
+    out.push(...batch.map((a) => ({ ...a, type })));
+    if (batch.length < 10) break;
+  }
+  return out;
+}
+
 // Kéo bài viết/broadcast THẬT trên OA Manager về (Zalo Article API)
 router.get("/zalo-articles", async (req, res, next) => {
   try {
     const { type } = req.query; // "normal" | "video" | undefined = cả hai
     const types = type ? [type] : ["normal", "video"];
-    const results = await Promise.all(
-      types.map((t) => getArticleSlice(t, 0, 30).then((m) => m.map((a) => ({ ...a, type: t }))).catch(() => []))
-    );
+    const results = await Promise.all(types.map((t) => fetchAllArticles(t)));
     const items = results.flat()
       .map((a) => ({
         id: a.id, type: a.type, title: a.title, thumb: a.thumb, status: a.status,
