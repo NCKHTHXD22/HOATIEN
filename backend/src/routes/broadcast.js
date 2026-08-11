@@ -16,7 +16,7 @@ const ScheduledBroadcast = require("../models/mongo/ScheduledBroadcast");
 const { sendToUsers, getJob } = require("../services/broadcastService");
 const { sendBroadcastPost, getJob: getPostJob } = require("../services/broadcastPostService");
 const Broadcast = require("../models/mongo/Broadcast");
-const { uploadImageToZalo, uploadFileToZalo } = require("../utils/zaloBroadcast");
+const { uploadImageToZalo, uploadFileToZalo, getArticleSlice } = require("../utils/zaloBroadcast");
 const { uploadFromBuffer } = require("../utils/cloudinaryUpload");
 const env = require("../config/env");
 const { prisma } = require("../config/database");
@@ -615,6 +615,26 @@ router.get("/posts", async (req, res, next) => {
 router.delete("/posts/:id", async (req, res) => {
   try { await Broadcast.findByIdAndDelete(req.params.id); ok(res, { ok: true }); }
   catch (e) { fail(res, e.message, 500); }
+});
+
+// Kéo bài viết/broadcast THẬT trên OA Manager về (Zalo Article API)
+router.get("/zalo-articles", async (req, res, next) => {
+  try {
+    const { type } = req.query; // "normal" | "video" | undefined = cả hai
+    const types = type ? [type] : ["normal", "video"];
+    const results = await Promise.all(
+      types.map((t) => getArticleSlice(t, 0, 30).then((m) => m.map((a) => ({ ...a, type: t }))).catch(() => []))
+    );
+    const items = results.flat()
+      .map((a) => ({
+        id: a.id, type: a.type, title: a.title, thumb: a.thumb, status: a.status,
+        totalView: a.total_view || 0, totalShare: a.total_share || 0,
+        totalLike: a.total_like || 0, totalComment: a.total_comment || 0,
+        createDate: a.create_date, linkView: a.link_view,
+      }))
+      .sort((x, y) => (y.createDate || 0) - (x.createDate || 0));
+    ok(res, { items });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

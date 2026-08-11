@@ -88,4 +88,25 @@ async function uploadFileToZalo(filepath, originalName) {
   return token;
 }
 
-module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo };
+// GET có tự refresh token 1 lần khi gặp -216
+async function _get(url) {
+  let token = await ZaloConfigRepo.getValidToken();
+  if (!token) throw new Error("Zalo OA chưa cấu hình access token");
+  const doReq = (t) => axios.get(url, { headers: { access_token: t } });
+  let res = await doReq(token);
+  if (res.data?.error === -216) {
+    token = await ZaloConfigRepo.refreshAccessToken();
+    if (token) res = await doReq(token);
+  }
+  return res;
+}
+
+// Liệt kê bài viết/broadcast thật trên OA Manager (type: "normal" | "video")
+async function getArticleSlice(type = "normal", offset = 0, limit = 20) {
+  const url = `https://openapi.zalo.me/v2.0/article/getslice?type=${type}&offset=${offset}&limit=${limit}`;
+  const res = await _get(url);
+  if (res.data?.error !== 0) throw new Error(`Zalo article ${res.data?.error}: ${res.data?.message}`);
+  return res.data?.data?.medias || [];
+}
+
+module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo, getArticleSlice };

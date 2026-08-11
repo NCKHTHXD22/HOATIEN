@@ -4,7 +4,7 @@ import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import {
   Megaphone, Plus, Search, Loader2, Trash2, Image as ImageIcon, X, Download,
-  Send, Eye,
+  Send, Eye, Share2, ThumbsUp, MessageCircle, ExternalLink, RefreshCw, Video,
 } from 'lucide-react'
 
 const STATUS = {
@@ -16,6 +16,150 @@ const fmt = (d) => (d ? new Date(d).toLocaleString('vi-VN') : '—')
 
 /* ══ Quản lý broadcast ══ */
 function ManageTab({ onCreate }) {
+  const [source, setSource] = useState('zalo') // zalo | web
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold text-slate-800">Quản lý broadcast</h2>
+          <div className="flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+            {[['zalo', 'Trên Zalo OA'], ['web', 'Tin gửi từ web']].map(([v, l]) => (
+              <button key={v} onClick={() => setSource(v)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${source === v ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <button onClick={onCreate} className="flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+          <Plus className="h-4 w-4" /> Tạo broadcast
+        </button>
+      </div>
+      {source === 'zalo' ? <ZaloArticles /> : <WebPosts />}
+    </div>
+  )
+}
+
+/* ── Bài viết/broadcast THẬT trên OA Manager (Zalo Article API) ── */
+const ZALO_ST = {
+  show: { label: 'Đang hiển thị', cls: 'bg-emerald-100 text-emerald-700' },
+  hide: { label: 'Đã ẩn', cls: 'bg-slate-100 text-slate-500' },
+}
+function ZaloArticles() {
+  const [q, setQ] = useState('')
+  const [status, setStatus] = useState('')
+  const [type, setType] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['zalo-articles'],
+    queryFn: () => api.get('/api/broadcast/zalo-articles').then((r) => r.data),
+  })
+
+  const items = useMemo(() => {
+    const s = q.toLowerCase()
+    return (data?.items ?? []).filter((a) => {
+      if (s && !a.title?.toLowerCase().includes(s)) return false
+      if (status && a.status !== status) return false
+      if (type && a.type !== type) return false
+      if (from && a.createDate < new Date(from).getTime()) return false
+      if (to && a.createDate > new Date(to + 'T23:59:59').getTime()) return false
+      return true
+    })
+  }, [data, q, status, type, from, to])
+
+  const exportCsv = () => {
+    const head = ['STT', 'Thời gian xuất bản', 'Tên broadcast', 'Loại', 'Lượt xem', 'Chia sẻ', 'Thích', 'Bình luận', 'Trạng thái']
+    const rows = items.map((a, i) => [i + 1, fmt(a.createDate), `"${(a.title || '').replace(/"/g, '""')}"`, a.type === 'video' ? 'Video' : 'Bài viết', a.totalView, a.totalShare, a.totalLike, a.totalComment, ZALO_ST[a.status]?.label || a.status])
+    const csv = '﻿' + [head, ...rows].map((r) => r.join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const a = document.createElement('a'); a.href = url; a.download = 'broadcast-oa-zalo.csv'; a.click(); URL.revokeObjectURL(url)
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm kiếm broadcast"
+            className="w-full h-9 pl-9 pr-3 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+        </div>
+        <select value={type} onChange={(e) => setType(e.target.value)} className="h-9 px-3 text-sm rounded-lg border border-slate-200 bg-white text-slate-700">
+          <option value="">Tất cả loại</option>
+          <option value="normal">Bài viết</option>
+          <option value="video">Video</option>
+        </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 px-3 text-sm rounded-lg border border-slate-200 bg-white text-slate-700">
+          <option value="">Chọn trạng thái</option>
+          <option value="show">Đang hiển thị</option>
+          <option value="hide">Đã ẩn</option>
+        </select>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 px-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-700" />
+        <span className="text-slate-400 text-sm">→</span>
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 px-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-700" />
+        <button onClick={() => refetch()} className="flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700"><RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} /> Làm mới</button>
+        <button onClick={exportCsv} className="ml-auto flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"><Download className="h-3.5 w-3.5" /> Xuất thống kê</button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[820px]">
+            <thead>
+              <tr className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-400 text-left">
+                <th className="px-4 py-3 w-10">#</th>
+                <th className="px-4 py-3 w-40">Thời gian xuất bản</th>
+                <th className="px-4 py-3">Tên broadcast</th>
+                <th className="px-3 py-3 w-16 text-center">Lượt xem</th>
+                <th className="px-3 py-3 w-14 text-center">Chia sẻ</th>
+                <th className="px-3 py-3 w-14 text-center">Thích</th>
+                <th className="px-3 py-3 w-16 text-center">Bình luận</th>
+                <th className="px-4 py-3 w-32">Trạng thái</th>
+                <th className="px-3 py-3 w-12"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {isLoading ? (
+                <tr><td colSpan={9} className="px-4 py-16 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></td></tr>
+              ) : items.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-16 text-center text-slate-400">Không có broadcast nào trên OA</td></tr>
+              ) : items.map((a, i) => {
+                const st = ZALO_ST[a.status] || { label: a.status, cls: 'bg-slate-100 text-slate-500' }
+                return (
+                  <tr key={a.id} className="hover:bg-slate-50/60">
+                    <td className="px-4 py-3 text-slate-400">{i + 1}</td>
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmt(a.createDate)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative shrink-0">
+                          {a.thumb
+                            ? <img src={a.thumb} alt="" className="h-10 w-14 rounded object-cover border border-slate-100" />
+                            : <div className="h-10 w-14 rounded bg-slate-100 flex items-center justify-center"><ImageIcon className="h-4 w-4 text-slate-300" /></div>}
+                          {a.type === 'video' && <span className="absolute inset-0 flex items-center justify-center"><Video className="h-4 w-4 text-white drop-shadow" /></span>}
+                        </div>
+                        <span className="font-medium text-slate-700 line-clamp-2">{a.title || '(Không tiêu đề)'}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-center font-semibold text-slate-700"><span className="inline-flex items-center gap-1"><Eye className="h-3 w-3 text-slate-300" />{a.totalView}</span></td>
+                    <td className="px-3 py-3 text-center text-slate-500"><span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3 text-slate-300" />{a.totalShare}</span></td>
+                    <td className="px-3 py-3 text-center text-slate-500"><span className="inline-flex items-center gap-1"><ThumbsUp className="h-3 w-3 text-slate-300" />{a.totalLike}</span></td>
+                    <td className="px-3 py-3 text-center text-slate-500"><span className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3 text-slate-300" />{a.totalComment}</span></td>
+                    <td className="px-4 py-3"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${st.cls}`}>{st.label}</span></td>
+                    <td className="px-3 py-3">
+                      {a.linkView && <a href={a.linkView} target="_blank" rel="noreferrer" className="p-1.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 inline-flex"><ExternalLink className="h-3.5 w-3.5" /></a>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-2.5 border-t border-slate-50 text-[11px] text-slate-400">Dữ liệu thật lấy trực tiếp từ Zalo OA Manager · {items.length} broadcast</div>
+      </div>
+    </>
+  )
+}
+
+/* ── Tin gửi từ web (message/cs) ── */
+function WebPosts() {
   const queryClient = useQueryClient()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
@@ -32,11 +176,7 @@ function ManageTab({ onCreate }) {
   const items = data?.items ?? []
   const totalPages = data?.totalPages ?? 1
 
-  const onSearch = (v) => {
-    setQ(v); clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => setPage(1), 300)
-  }
-
+  const onSearch = (v) => { setQ(v); clearTimeout(debounce.current); debounce.current = setTimeout(() => setPage(1), 300) }
   const del = async (id) => {
     if (!window.confirm('Xóa broadcast này khỏi danh sách?')) return
     try { await api.delete(`/api/broadcast/posts/${id}`); queryClient.invalidateQueries({ queryKey: ['broadcast-posts'] }) }
@@ -51,15 +191,7 @@ function ManageTab({ onCreate }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">Quản lý broadcast</h2>
-        <button onClick={onCreate} className="flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-          <Plus className="h-4 w-4" /> Tạo broadcast
-        </button>
-      </div>
-
-      {/* Toolbar */}
+    <>
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
@@ -81,7 +213,6 @@ function ManageTab({ onCreate }) {
         </button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[720px]">
@@ -100,7 +231,7 @@ function ManageTab({ onCreate }) {
               {isLoading ? (
                 <tr><td colSpan={7} className="px-4 py-16 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-16 text-center text-slate-400">Chưa có broadcast nào</td></tr>
+                <tr><td colSpan={7} className="px-4 py-16 text-center text-slate-400">Chưa gửi tin nào từ web</td></tr>
               ) : items.map((b, i) => {
                 const st = STATUS[b.status] || STATUS.sending
                 return (
@@ -135,7 +266,7 @@ function ManageTab({ onCreate }) {
           </div>
         )}
       </div>
-    </div>
+    </>
   )
 }
 
