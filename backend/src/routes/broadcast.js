@@ -16,7 +16,7 @@ const ScheduledBroadcast = require("../models/mongo/ScheduledBroadcast");
 const { sendToUsers, getJob } = require("../services/broadcastService");
 const { sendBroadcastPost, getJob: getPostJob } = require("../services/broadcastPostService");
 const Broadcast = require("../models/mongo/Broadcast");
-const { uploadImageToZalo, uploadFileToZalo, getArticleSlice } = require("../utils/zaloBroadcast");
+const { uploadImageToZalo, uploadFileToZalo, getArticleSlice, createArticle, removeArticle } = require("../utils/zaloBroadcast");
 const { uploadFromBuffer } = require("../utils/cloudinaryUpload");
 const env = require("../config/env");
 const { prisma } = require("../config/database");
@@ -646,6 +646,65 @@ router.get("/zalo-articles", async (req, res, next) => {
       .sort((x, y) => (y.createDate || 0) - (x.createDate || 0));
     ok(res, { items });
   } catch (err) { next(err); }
+});
+
+// ── Tạo broadcast/bài viết THẬT lên OA (Zalo Article API) ──────────
+const escHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const toArticleHtml = (text) =>
+  String(text || "").split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => `<p>${escHtml(l)}</p>`).join("") || "<p></p>";
+
+// Upload ảnh cho bài viết → Cloudinary (URL công khai để Zalo tự host lại)
+router.post("/articles/upload-image", (req, res) => {
+  const upload = makeUpload("article", {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_, file, cb) => (file.mimetype.startsWith("image/") ? cb(null, true) : cb(new Error("Chỉ nhận ảnh"))),
+  }).single("image");
+  upload(req, res, async (err) => {
+    if (err) return fail(res, err.message);
+    if (!req.file) return fail(res, "Không có ảnh");
+    try {
+      const url = await uploadFromBuffer(fs.readFileSync(req.file.path), `article_${Date.now()}`);
+      fs.unlink(req.file.path, () => {});
+      ok(res, { url });
+    } catch (e) {
+      fs.unlink(req.file.path, () => {});
+      fail(res, e.message, 500);
+    }
+  });
+});
+
+// Đăng bài viết/broadcast lên OA
+router.post("/articles", requireSendPermission(), async (req, res, next) => {
+  try {
+    const { title, author, description, coverUrl, blocks, status, comment } = req.body;
+    if (!title?.trim()) return fail(res, "Cần tiêu đề");
+    if (!coverUrl) return fail(res, "Cần ảnh bìa");
+    const body = (Array.isArray(blocks) ? blocks : [])
+      .map((b) => {
+        if (b?.type === "image" && b.url) return { type: "image", url: b.url, caption: b.caption || "" };
+        if (b?.type === "text" && String(b.content || "").trim()) return { type: "text", content: toArticleHtml(b.content) };
+        return null;
+      })
+      .filter(Boolean);
+    if (!body.length) return fail(res, "Cần nội dung (đoạn văn hoặc ảnh)");
+    const data = await createArticle({
+      type: "normal",
+      title: title.trim(),
+      author: author || "",
+      description: description || "",
+      status: status === "hide" ? "hide" : "show",
+      comment: comment === "hide" ? "hide" : "show",
+      cover: { cover_type: "photo", photo_url: coverUrl, status: "show" },
+      body,
+    });
+    ok(res, { ok: true, token: data?.token });
+  } catch (err) { next(err); }
+});
+
+// Xóa bài viết khỏi OA
+router.delete("/articles/:id", async (req, res) => {
+  try { await removeArticle(req.params.id); ok(res, { ok: true }); }
+  catch (e) { fail(res, e.message, 500); }
 });
 
 module.exports = router;

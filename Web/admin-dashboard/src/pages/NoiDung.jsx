@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   Megaphone, Plus, Search, Loader2, Trash2, Image as ImageIcon, X, Download,
   Send, Eye, Share2, ThumbsUp, MessageCircle, ExternalLink, RefreshCw, Video,
+  Type, FileText, ArrowUp, ArrowDown,
 } from 'lucide-react'
 
 const STATUS = {
@@ -270,155 +271,181 @@ function WebPosts() {
   )
 }
 
-/* ══ Tạo broadcast ══ */
+/* ══ Tạo broadcast — soạn bài viết đăng THẬT lên OA (article/create) ══ */
+const uid = () => Date.now() + '_' + Math.random().toString(36).slice(2, 7)
+async function uploadArticleImage(file) {
+  const fd = new FormData(); fd.append('image', file)
+  const r = await api.post('/api/broadcast/articles/upload-image', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 })
+  return r.data.url
+}
+
 function CreateTab({ onDone }) {
   const queryClient = useQueryClient()
-  const [name, setName] = useState('')
-  const [content, setContent] = useState('')
-  const [linkUrl, setLinkUrl] = useState('')
-  const [linkTitle, setLinkTitle] = useState('')
-  const [image, setImage] = useState(null) // { imageAttachmentId, thumbnail }
-  const [uploading, setUploading] = useState(false)
-  const [mode, setMode] = useState('all') // all | groups | followers
-  const [selGroups, setSelGroups] = useState(new Set())
-  const [selFollowers, setSelFollowers] = useState(new Set())
-  const [fSearch, setFSearch] = useState('')
-  const [sending, setSending] = useState(false)
+  const [title, setTitle] = useState('')
+  const [author, setAuthor] = useState('UBND xã Hòa Tiến')
+  const [description, setDescription] = useState('')
+  const [cover, setCover] = useState('') // url
+  const [coverUploading, setCoverUploading] = useState(false)
+  const [blocks, setBlocks] = useState([{ id: uid(), type: 'text', content: '' }])
+  const [status, setStatus] = useState('show')
+  const [allowComment, setAllowComment] = useState(true)
+  const [publishing, setPublishing] = useState(false)
 
-  const { data: fData } = useQuery({ queryKey: ['bc-followers'], queryFn: () => api.get('/api/broadcast/followers').then((r) => r.data) })
-  const { data: gData } = useQuery({ queryKey: ['bc-groups'], queryFn: () => api.get('/api/broadcast/groups').then((r) => r.data) })
-  const followers = fData?.followers ?? []
-  const groups = gData?.groups ?? []
-
-  const filteredFollowers = useMemo(() => {
-    const s = fSearch.toLowerCase()
-    return followers.filter((f) => !s || f.display_name?.toLowerCase().includes(s) || f.user_id?.includes(s)).slice(0, 100)
-  }, [followers, fSearch])
-
-  const upload = async (file) => {
-    if (!file) return
-    setUploading(true)
-    try {
-      const fd = new FormData(); fd.append('image', file)
-      const r = await api.post('/api/broadcast/posts/upload-image', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 })
-      setImage(r.data)
-    } catch (e) { toast.error(e.response?.data?.error || 'Lỗi tải ảnh') }
-    finally { setUploading(false) }
-  }
-
-  const pollStatus = (jobId) => new Promise((resolve) => {
-    const iv = setInterval(async () => {
-      try {
-        const { data } = await api.get(`/api/broadcast/posts/status/${jobId}`)
-        if (data.done) { clearInterval(iv); resolve(data) }
-      } catch { clearInterval(iv); resolve(null) }
-    }, 1500)
-    setTimeout(() => { clearInterval(iv); resolve(null) }, 10 * 60 * 1000)
+  const setBlock = (id, patch) => setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)))
+  const removeBlock = (id) => setBlocks((bs) => bs.filter((b) => b.id !== id))
+  const moveBlock = (id, dir) => setBlocks((bs) => {
+    const i = bs.findIndex((b) => b.id === id); const j = i + dir
+    if (i < 0 || j < 0 || j >= bs.length) return bs
+    const n = [...bs];[n[i], n[j]] = [n[j], n[i]]; return n
   })
+  const addText = () => setBlocks((bs) => [...bs, { id: uid(), type: 'text', content: '' }])
+  const addImage = () => setBlocks((bs) => [...bs, { id: uid(), type: 'image', url: '', caption: '', uploading: false }])
 
-  const submit = async () => {
-    if (!name.trim()) return toast.error('Nhập tên broadcast')
-    if (!content.trim() && !image && !linkUrl.trim()) return toast.error('Cần nội dung, ảnh hoặc link')
-    let userIds = [], groupIds = []
-    if (mode === 'all') userIds = followers.map((f) => f.user_id)
-    else if (mode === 'groups') groupIds = [...selGroups]
-    else userIds = [...selFollowers]
-    if (!userIds.length && !groupIds.length) return toast.error('Chọn đối tượng nhận')
-
-    setSending(true)
-    try {
-      const { data } = await api.post('/api/broadcast/posts', {
-        name, content, thumbnail: image?.thumbnail, imageAttachmentId: image?.imageAttachmentId,
-        linkUrl, linkTitle, userIds, groupIds,
-      })
-      toast.info(`Đang gửi tới ${data.total} đối tượng...`)
-      const res = await pollStatus(data.jobId)
-      if (res) toast.success(`Xong: gửi ${res.sent}${res.failed ? `, ${res.failed} lỗi (48h)` : ''}`)
-      queryClient.invalidateQueries({ queryKey: ['broadcast-posts'] })
-      onDone()
-    } catch (e) { toast.error(e.response?.data?.error || 'Lỗi gửi broadcast') }
-    finally { setSending(false) }
+  const onCover = async (file) => {
+    if (!file) return
+    setCoverUploading(true)
+    try { setCover(await uploadArticleImage(file)) }
+    catch (e) { toast.error(e.response?.data?.error || 'Lỗi tải ảnh bìa') }
+    finally { setCoverUploading(false) }
+  }
+  const onBlockImage = async (id, file) => {
+    if (!file) return
+    setBlock(id, { uploading: true })
+    try { setBlock(id, { url: await uploadArticleImage(file), uploading: false }) }
+    catch (e) { toast.error(e.response?.data?.error || 'Lỗi tải ảnh'); setBlock(id, { uploading: false }) }
   }
 
-  const toggle = (set, setSet, v) => { const n = new Set(set); n.has(v) ? n.delete(v) : n.add(v); setSet(n) }
+  const publish = async () => {
+    if (!title.trim()) return toast.error('Nhập tiêu đề')
+    if (!cover) return toast.error('Cần ảnh bìa')
+    const clean = blocks
+      .map((b) => (b.type === 'image' ? (b.url ? { type: 'image', url: b.url, caption: b.caption } : null) : (b.content.trim() ? { type: 'text', content: b.content } : null)))
+      .filter(Boolean)
+    if (!clean.length) return toast.error('Cần ít nhất một đoạn văn hoặc ảnh')
+
+    setPublishing(true)
+    try {
+      await api.post('/api/broadcast/articles', {
+        title, author, description, coverUrl: cover, blocks: clean,
+        status, comment: allowComment ? 'show' : 'hide',
+      })
+      toast.success(status === 'show' ? 'Đã đăng bài lên OA Zalo' : 'Đã lưu bài (ẩn) trên OA')
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['zalo-articles'] }), 1500)
+      onDone()
+    } catch (e) { toast.error(e.response?.data?.error || 'Lỗi đăng bài') }
+    finally { setPublishing(false) }
+  }
 
   return (
-    <div className="space-y-4 max-w-2xl">
-      <h2 className="text-xl font-bold text-slate-800">Tạo broadcast</h2>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <h2 className="text-xl font-bold text-slate-800">Tạo broadcast</h2>
+        <span className="text-xs text-slate-400">— đăng bài viết lên Zalo OA</span>
+      </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-        <Field label="Tên broadcast">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="VD: Thông báo lịch tiếp công dân tháng 8"
-            className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
-        </Field>
+      <div className="flex flex-col lg:flex-row gap-5">
+        {/* Form soạn */}
+        <div className="flex-1 min-w-0 bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <Field label="Tiêu đề *">
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="VD: Thông báo lịch tiếp công dân tháng 8"
+              className="w-full h-10 px-3 text-sm font-medium rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+          </Field>
 
-        <Field label="Nội dung">
-          <textarea rows={4} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Nội dung gửi tới người dân..."
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
-        </Field>
+          <Field label="Ảnh bìa *">
+            {cover ? (
+              <div className="relative w-full max-w-sm">
+                <img src={cover} alt="" className="w-full aspect-video rounded-lg object-cover border border-slate-100" />
+                <button onClick={() => setCover('')} className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70"><X className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-1 w-full max-w-sm aspect-video rounded-lg border-2 border-dashed border-slate-200 text-slate-400 cursor-pointer hover:border-blue-400 hover:text-blue-500">
+                {coverUploading ? <Loader2 className="h-6 w-6 animate-spin" /> : <><ImageIcon className="h-7 w-7" /><span className="text-xs">Tải ảnh bìa</span></>}
+                <input type="file" accept="image/*" className="hidden" disabled={coverUploading} onChange={(e) => onCover(e.target.files?.[0])} />
+              </label>
+            )}
+          </Field>
 
-        <Field label="Ảnh (tùy chọn)">
-          {image ? (
-            <div className="flex items-center gap-3">
-              <img src={image.thumbnail} alt="" className="h-16 w-24 rounded object-cover border border-slate-100" />
-              <button onClick={() => setImage(null)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><X className="h-3 w-3" /> Bỏ ảnh</button>
-            </div>
-          ) : (
-            <label className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-500">
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />} Tải ảnh
-              <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={(e) => upload(e.target.files?.[0])} />
-            </label>
-          )}
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Link kèm (tùy chọn)"><input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://..." className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400/30" /></Field>
-          <Field label="Tiêu đề link"><input value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} placeholder="VD: Xem chi tiết" className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400/30" /></Field>
-        </div>
-
-        {/* Đối tượng nhận */}
-        <Field label="Đối tượng nhận">
-          <div className="flex gap-2 mb-2">
-            {[['all', `Tất cả follower (${followers.length})`], ['groups', 'Theo nhóm Zalo'], ['followers', 'Chọn follower']].map(([v, l]) => (
-              <button key={v} onClick={() => setMode(v)} className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${mode === v ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{l}</button>
-            ))}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Tác giả"><input value={author} onChange={(e) => setAuthor(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400/30" /></Field>
+            <Field label="Trạng thái">
+              <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 bg-white text-slate-700">
+                <option value="show">Hiện ngay trên OA</option>
+                <option value="hide">Lưu ẩn (nháp)</option>
+              </select>
+            </Field>
           </div>
 
-          {mode === 'all' && <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Chỉ người đã tương tác OA trong 48h mới nhận được (luật Zalo). Còn lại sẽ vào phần "lỗi".</p>}
+          <Field label="Mô tả ngắn (hiện ở danh sách)">
+            <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Tóm tắt nội dung bài..."
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+          </Field>
 
-          {mode === 'groups' && (
-            <div className="max-h-52 overflow-y-auto space-y-1 border border-slate-100 rounded-lg p-2">
-              {groups.length === 0 ? <p className="text-xs text-slate-400 text-center py-3">Chưa có nhóm Zalo nào</p> : groups.map((g) => (
-                <label key={g.group_id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm">
-                  <input type="checkbox" checked={selGroups.has(g.group_id)} onChange={() => toggle(selGroups, setSelGroups, g.group_id)} className="rounded" />
-                  <span>{g.icon} {g.name}</span>
-                  <span className="text-[11px] text-slate-400 ml-auto">{g.memberCount || 0} tv</span>
-                </label>
+          {/* Nội dung: khối văn bản + ảnh */}
+          <Field label="Nội dung bài viết">
+            <div className="space-y-2">
+              {blocks.map((b, i) => (
+                <div key={b.id} className="group relative border border-slate-150 rounded-lg p-2.5 bg-slate-50/40">
+                  <div className="absolute -top-2.5 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => moveBlock(b.id, -1)} disabled={i === 0} className="h-6 w-6 rounded bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30"><ArrowUp className="h-3 w-3" /></button>
+                    <button onClick={() => moveBlock(b.id, 1)} disabled={i === blocks.length - 1} className="h-6 w-6 rounded bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30"><ArrowDown className="h-3 w-3" /></button>
+                    <button onClick={() => removeBlock(b.id)} className="h-6 w-6 rounded bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
+                  </div>
+                  {b.type === 'text' ? (
+                    <textarea rows={3} value={b.content} onChange={(e) => setBlock(b.id, { content: e.target.value })} placeholder="Nhập đoạn văn bản..."
+                      className="w-full px-2 py-1.5 text-sm rounded border border-slate-200 bg-white resize-none focus:outline-none focus:ring-1 focus:ring-blue-400/40" />
+                  ) : b.url ? (
+                    <div className="space-y-1.5">
+                      <img src={b.url} alt="" className="max-h-48 rounded object-contain border border-slate-100 bg-white" />
+                      <input value={b.caption} onChange={(e) => setBlock(b.id, { caption: e.target.value })} placeholder="Chú thích ảnh (tùy chọn)"
+                        className="w-full h-8 px-2 text-xs rounded border border-slate-200" />
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-2 h-20 rounded border-2 border-dashed border-slate-200 text-slate-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 text-sm">
+                      {b.uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><ImageIcon className="h-5 w-5" /> Tải ảnh</>}
+                      <input type="file" accept="image/*" className="hidden" disabled={b.uploading} onChange={(e) => onBlockImage(b.id, e.target.files?.[0])} />
+                    </label>
+                  )}
+                </div>
               ))}
-            </div>
-          )}
-
-          {mode === 'followers' && (
-            <div className="border border-slate-100 rounded-lg p-2 space-y-2">
-              <input value={fSearch} onChange={(e) => setFSearch(e.target.value)} placeholder="Tìm follower..." className="w-full h-8 px-2 text-xs rounded border border-slate-200" />
-              <div className="max-h-44 overflow-y-auto space-y-0.5">
-                {filteredFollowers.map((f) => (
-                  <label key={f.user_id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm">
-                    <input type="checkbox" checked={selFollowers.has(f.user_id)} onChange={() => toggle(selFollowers, setSelFollowers, f.user_id)} className="rounded" />
-                    <span className="truncate">{f.display_name || f.user_id}</span>
-                  </label>
-                ))}
+              <div className="flex gap-2">
+                <button onClick={addText} className="flex items-center gap-1 h-8 px-3 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600"><Type className="h-3.5 w-3.5" /> Thêm đoạn văn</button>
+                <button onClick={addImage} className="flex items-center gap-1 h-8 px-3 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600"><ImageIcon className="h-3.5 w-3.5" /> Thêm ảnh</button>
               </div>
-              <p className="text-[11px] text-slate-400">Đã chọn {selFollowers.size}</p>
             </div>
-          )}
-        </Field>
+          </Field>
 
-        <div className="flex justify-end pt-1">
-          <button onClick={submit} disabled={sending}
-            className="flex items-center gap-1.5 h-10 px-5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Gửi broadcast
-          </button>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" checked={allowComment} onChange={(e) => setAllowComment(e.target.checked)} className="rounded" /> Cho phép bình luận
+          </label>
+
+          <div className="flex justify-end pt-1 border-t border-slate-100">
+            <button onClick={publish} disabled={publishing}
+              className="mt-3 flex items-center gap-1.5 h-10 px-5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {status === 'show' ? 'Đăng lên OA' : 'Lưu nháp'}
+            </button>
+          </div>
+        </div>
+
+        {/* Xem trước */}
+        <div className="lg:w-80 shrink-0">
+          <div className="sticky top-4">
+            <p className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1"><Eye className="h-3.5 w-3.5" /> Xem trước</p>
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              {cover ? <img src={cover} alt="" className="w-full aspect-video object-cover" /> : <div className="w-full aspect-video bg-slate-100 flex items-center justify-center text-slate-300"><ImageIcon className="h-8 w-8" /></div>}
+              <div className="p-4 space-y-2">
+                <h3 className="font-bold text-slate-800 leading-snug">{title || 'Tiêu đề bài viết'}</h3>
+                {author && <p className="text-[11px] text-slate-400">{author}</p>}
+                {description && <p className="text-xs text-slate-500 italic">{description}</p>}
+                <div className="space-y-2 pt-1">
+                  {blocks.map((b) => b.type === 'text'
+                    ? (b.content.trim() && <p key={b.id} className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{b.content}</p>)
+                    : (b.url && <figure key={b.id}><img src={b.url} alt="" className="w-full rounded" />{b.caption && <figcaption className="text-[11px] text-slate-400 text-center mt-1">{b.caption}</figcaption>}</figure>)
+                  )}
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">Bài sẽ xuất hiện trong <b>Quản lý broadcast → Trên Zalo OA</b> sau vài giây.</p>
+          </div>
         </div>
       </div>
     </div>
