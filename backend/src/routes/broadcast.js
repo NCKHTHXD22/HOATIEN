@@ -265,6 +265,24 @@ router.post("/groups/create-zalo", requireSendPermission(), async (req, res, nex
   } catch (err) { next(err); }
 });
 
+// Tạo nhóm Zalo với TOÀN BỘ follower OA (background job, tránh timeout)
+router.post("/groups/create-zalo-all-followers", requireSendPermission(), async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return fail(res, "Cần tên nhóm");
+    const jobId = ZaloService.startCreateGroupAllFollowers(name.trim());
+    ok(res, { jobId, status: "started" });
+  } catch (err) { next(err); }
+});
+
+router.get("/groups/create-zalo-all-followers-status/:jobId", async (req, res, next) => {
+  try {
+    const job = ZaloService.getCreateGroupAllFollowersJob(req.params.jobId);
+    if (!job) return fail(res, "Không tìm thấy job", 404);
+    ok(res, job);
+  } catch (err) { next(err); }
+});
+
 // Xoá nhóm khỏi hệ thống (KHÔNG giải tán nhóm Zalo thật) + xoá thành viên
 router.delete("/groups/:id", async (req, res, next) => {
   try {

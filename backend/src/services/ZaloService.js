@@ -519,6 +519,71 @@ function getAutoLinkJob(jobId) {
   return _autoLinkJobs.get(jobId) || null;
 }
 
+// ─── Tạo nhóm Zalo từ toàn bộ follower OA (background job) ──────────────────
+const _createGroupAllFollowersJobs = new Map();
+
+async function _runCreateGroupAllFollowers(jobId, name) {
+  const job = _createGroupAllFollowersJobs.get(jobId);
+  const zaloGmf = require("../utils/zaloGmf");
+  const ZaloGroup = require("../models/mongo/ZaloGroup");
+  try {
+    job.status = "fetching";
+    const allIds = await _fetchAllFollowerIds();
+    job.total = allIds.length;
+    if (allIds.length === 0) {
+      job.status = "error";
+      job.error = "Không có follower nào trong OA";
+      return;
+    }
+    job.status = "creating";
+    const groupId = await zaloGmf.createZaloGroup(name, allIds, name);
+    if (!groupId) {
+      job.status = "error";
+      job.error = "Zalo không trả về group_id";
+      return;
+    }
+    job.groupId = groupId;
+    job.added = Math.min(50, allIds.length);
+    // Thêm các thành viên còn lại theo batch 50
+    if (allIds.length > 50) {
+      job.status = "adding";
+      const remaining = allIds.slice(50);
+      for (let i = 0; i < remaining.length; i += 50) {
+        const batch = remaining.slice(i, i + 50);
+        const data = await zaloGmf.addMembersToGroup(groupId, batch).catch(() => ({ added: 0, failed: batch.length }));
+        job.added += data.added || 0;
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+    await ZaloGroup.findOneAndUpdate(
+      { groupId: String(groupId) },
+      { $set: { name, icon: "💬" } },
+      { upsert: true }
+    ).catch(() => {});
+    job.status = "done";
+  } catch (e) {
+    job.status = "error";
+    job.error = e.message;
+    logger.error(`createGroupAllFollowers job ${jobId}: ${e.message}`);
+  }
+}
+
+function startCreateGroupAllFollowers(name) {
+  const jobId = Date.now().toString();
+  const job = { status: "starting", total: 0, added: 0, groupId: null, error: null };
+  _createGroupAllFollowersJobs.set(jobId, job);
+  if (_createGroupAllFollowersJobs.size > 10) {
+    const firstKey = _createGroupAllFollowersJobs.keys().next().value;
+    _createGroupAllFollowersJobs.delete(firstKey);
+  }
+  _runCreateGroupAllFollowers(jobId, name);
+  return jobId;
+}
+
+function getCreateGroupAllFollowersJob(jobId) {
+  return _createGroupAllFollowersJobs.get(jobId) || null;
+}
+
 // Gửi 1 tin tới nhiều follower (theo user_id). Trả về kết quả từng người.
 async function sendToFollowers(userIds, text, attachments = []) {
   const results = [];
@@ -534,4 +599,4 @@ async function sendToFollowers(userIds, text, attachments = []) {
   return results;
 }
 
-module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState, getProfileByPhone, startAutoLink, getAutoLinkJob };
+module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState, getProfileByPhone, startAutoLink, getAutoLinkJob, startCreateGroupAllFollowers, getCreateGroupAllFollowersJob };

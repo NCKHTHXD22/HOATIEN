@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Loader2, Users, RefreshCw, Search, X, UserCheck, Check } from 'lucide-react'
+import { Plus, Trash2, Loader2, Users, RefreshCw, Search, X, UserCheck, Check, Zap } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
@@ -488,6 +488,108 @@ function GroupCard({ cat, followers, villages, onDelete }) {
   )
 }
 
+function AllFollowersGroupPanel() {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState('Thông tin số xã Hòa Tiến')
+  const [jobId, setJobId] = useState(null)
+  const [job, setJob] = useState(null)
+  const pollRef = useRef(null)
+
+  const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
+
+  const startPoll = (id) => {
+    stopPoll()
+    pollRef.current = setInterval(async () => {
+      try {
+        const r = await api.get(`/api/broadcast/groups/create-zalo-all-followers-status/${id}`)
+        const j = r.data?.data || r.data
+        setJob(j)
+        if (j.status === 'done' || j.status === 'error') {
+          stopPoll()
+          if (j.status === 'done') {
+            toast.success(`Tạo nhóm thành công! Đã thêm ${j.added}/${j.total} follower`)
+            queryClient.invalidateQueries({ queryKey: ['broadcast-groups'] })
+          } else {
+            toast.error(`Lỗi: ${j.error}`)
+          }
+        }
+      } catch { stopPoll() }
+    }, 2000)
+  }
+
+  async function handleStart() {
+    if (!name.trim()) return toast.error('Cần tên nhóm')
+    try {
+      const r = await api.post('/api/broadcast/groups/create-zalo-all-followers', { name: name.trim() })
+      const id = r.data?.data?.jobId || r.data?.jobId
+      setJobId(id)
+      setJob({ status: 'starting', total: 0, added: 0, groupId: null, error: null })
+      startPoll(id)
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Lỗi khởi động job')
+    }
+  }
+
+  const isRunning = job && !['done', 'error'].includes(job?.status)
+  const progress = job?.total > 0 ? Math.round((job.added / job.total) * 100) : 0
+
+  const statusLabel = {
+    starting: 'Đang khởi động...',
+    fetching: 'Đang lấy danh sách follower từ Zalo...',
+    creating: 'Đang tạo nhóm Zalo...',
+    adding: `Đang thêm thành viên... (${job?.added ?? 0}/${job?.total ?? 0})`,
+    done: 'Hoàn thành!',
+    error: `Lỗi: ${job?.error}`,
+  }[job?.status] ?? ''
+
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Zap className="h-4 w-4 text-violet-600 shrink-0" />
+        <span className="text-sm font-semibold text-violet-800">Tạo nhóm toàn bộ follower OA</span>
+        <span className="text-xs text-violet-500 bg-violet-100 px-2 py-0.5 rounded-full">Cách 2</span>
+      </div>
+      <p className="text-xs text-slate-500">
+        Lấy tất cả người đang quan tâm OA (không cần liên kết nhân khẩu) rồi tạo nhóm Zalo một lần.
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={isRunning}
+          placeholder="Tên nhóm Zalo"
+          className="flex-1 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={handleStart}
+          disabled={isRunning}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors shrink-0"
+        >
+          {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+          {isRunning ? 'Đang xử lý...' : 'Tạo nhóm'}
+        </button>
+      </div>
+      {job && (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-600">{statusLabel}</p>
+          {job.status === 'adding' && (
+            <div className="h-2 rounded-full bg-violet-100 overflow-hidden">
+              <div className="h-full bg-violet-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+            </div>
+          )}
+          {job.status === 'done' && (
+            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+              Nhóm ID: <code className="font-mono">{job.groupId}</code> · Đã thêm <strong>{job.added}</strong>/{job.total} follower
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const ICONS = ['🏗️', '🏫', '📋', '🚔', '🌿', '💧', '🏥', '🏛️', '🔧', '📢']
 
 export default function SettingsPage() {
@@ -836,6 +938,8 @@ export default function SettingsPage() {
           ))}
         </div>
       )}
+
+      <AllFollowersGroupPanel />
     </div>
   )
 }
