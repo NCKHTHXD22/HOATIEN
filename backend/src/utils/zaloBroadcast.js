@@ -26,6 +26,16 @@ async function sendText(id, text, isGroup = false) {
   if (res.data?.error !== 0) throw new Error(`Zalo ${res.data?.error}: ${res.data?.message}`);
 }
 
+// Gửi tin dạng THẺ danh sách (list template) — hiển thị bài viết như card đẹp
+// elements: [{ title, subtitle, image_url, default_action:{ type:"oa.open.url", url } }]
+async function sendArticleCard(id, elements, isGroup = false) {
+  const res = await _post(MSG_API, {
+    recipient: recipient(id, isGroup),
+    message: { attachment: { type: "template", payload: { template_type: "list", elements } } },
+  });
+  if (res.data?.error !== 0) throw new Error(`Zalo card ${res.data?.error}: ${res.data?.message}`);
+}
+
 // Gửi nhiều ảnh (theo attachment_id đã upload), mỗi ảnh 1 message
 async function sendImages(id, attachmentIds, isGroup = false) {
   for (const attId of attachmentIds) {
@@ -130,4 +140,4 @@ async function removeArticle(id) {
   return true;
 }
 
-module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo, getArticleSlice, getArticleDetail, createArticle, removeArticle };
+module.exports = { sendText, sendImages, sendFile, sendArticleCard, uploadImageToZalo, uploadFileToZalo, getArticleSlice, getArticleDetail, createArticle, removeArticle };

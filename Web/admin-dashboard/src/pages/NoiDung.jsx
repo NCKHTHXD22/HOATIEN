@@ -385,12 +385,12 @@ function BroadcastSetup({ onCompose, onSent }) {
     else if (aud === 'groups') groupIds = [...selGroups]
     else userIds = [...selFollowers]
     if (!userIds.length && !groupIds.length) return toast.error('Chọn đối tượng gửi')
-    const content = selected.map((a) => `📰 ${a.title}\n${a.linkView}`).join('\n\n')
     setSending(true)
     try {
       const { data: r } = await api.post('/api/broadcast/posts', {
         name: name.trim() || `Broadcast ${new Date().toLocaleDateString('vi-VN')}`,
-        content, userIds, groupIds,
+        articles: selected.map((a) => ({ id: a.id, title: a.title, thumb: a.thumb, linkView: a.linkView })),
+        userIds, groupIds,
       })
       toast.success(`Đang gửi broadcast tới ${r.total} đối tượng (người tương tác 48h sẽ nhận)`)
       onSent()

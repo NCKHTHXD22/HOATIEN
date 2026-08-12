@@ -15,11 +15,12 @@ function createJob(total) {
 function getJob(jobId) { return jobs.get(jobId) || null; }
 
 // userIds: follower; groupIds: nhóm Zalo (gửi 1 tin vào nhóm). Quy ước "g:<id>" khớp broadcastService.
-async function sendBroadcastPost({ name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, userIds = [], groupIds = [], createdBy }) {
+// articles: nếu có → gửi tin THẺ (list template) hiển thị bài viết đẹp thay cho text+link.
+async function sendBroadcastPost({ name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, articles = [], userIds = [], groupIds = [], createdBy }) {
   const recipients = [...userIds.map(String), ...groupIds.map((g) => "g:" + String(g))];
 
   const doc = await Broadcast.create({
-    name: name || "", content: content || "", thumbnail: thumbnail || "", imageAttachmentId: imageAttachmentId || null,
+    name: name || "", content: content || "", thumbnail: thumbnail || articles[0]?.thumb || "", imageAttachmentId: imageAttachmentId || null,
     linkUrl: linkUrl || "", linkTitle: linkTitle || "", recipientCount: recipients.length,
     userIds: userIds.map(String), groupIds: groupIds.map(String), createdBy: createdBy || "", status: "sending",
   });
@@ -29,7 +30,23 @@ async function sendBroadcastPost({ name, content, thumbnail, imageAttachmentId, 
   job.broadcastId = String(doc._id);
 
   (async () => {
-    // Nội dung + link đã bọc theo dõi (bấm vào tăng views rồi redirect)
+    // Dựng elements cho tin THẺ (lấy thêm mô tả từ getdetail để card đẹp như Zalo)
+    let elements = null;
+    if (articles.length) {
+      for (const a of articles) {
+        if (!a.description) {
+          try { const d = await zalo.getArticleDetail(a.id); a.description = d?.description || ""; } catch { /* bỏ qua */ }
+        }
+      }
+      elements = articles.slice(0, 5).map((a) => ({
+        title: (a.title || "").slice(0, 100),
+        subtitle: (a.description || "").slice(0, 255),
+        image_url: a.thumb || a.cover || "",
+        default_action: { type: "oa.open.url", url: a.linkView || a.linkUrl || "" },
+      }));
+    }
+
+    // Nội dung + link đã bọc theo dõi (bấm vào tăng views rồi redirect) — dùng khi KHÔNG có thẻ
     let linkLine = "";
     if (linkUrl) {
       const tracked = `${PUBLIC_BASE}/api/broadcast/click/${doc._id}?to=${encodeURIComponent(linkUrl)}`;
@@ -41,8 +58,12 @@ async function sendBroadcastPost({ name, content, thumbnail, imageAttachmentId, 
       try {
         const isGroup = rawId.startsWith("g:");
         const id = isGroup ? rawId.slice(2) : rawId;
-        if (text) await zalo.sendText(id, text, isGroup);
-        if (imageAttachmentId) await zalo.sendImages(id, [imageAttachmentId], isGroup);
+        if (elements) {
+          await zalo.sendArticleCard(id, elements, isGroup);
+        } else {
+          if (text) await zalo.sendText(id, text, isGroup);
+          if (imageAttachmentId) await zalo.sendImages(id, [imageAttachmentId], isGroup);
+        }
         job.sent++;
       } catch (e) {
         logger.error(`[BroadcastPost] gửi ${rawId} lỗi: ${e.message}`);

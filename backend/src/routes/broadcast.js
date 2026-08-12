@@ -560,11 +560,11 @@ router.post("/posts/upload-image", (req, res) => {
 // Tạo broadcast (gửi nền) — gửi tới follower (userIds) và/hoặc nhóm Zalo (groupIds)
 router.post("/posts", requireSendPermission(), async (req, res, next) => {
   try {
-    const { name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, userIds = [], groupIds = [] } = req.body;
+    const { name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, articles = [], userIds = [], groupIds = [] } = req.body;
     if (!name?.trim()) return fail(res, "Cần tên broadcast");
     if (!userIds.length && !groupIds.length) return fail(res, "Cần chọn đối tượng nhận (follower hoặc nhóm)");
-    if (!content?.trim() && !imageAttachmentId && !linkUrl) return fail(res, "Cần nội dung, ảnh hoặc link");
-    const r = await sendBroadcastPost({ name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, userIds, groupIds, createdBy: req.user?.id });
+    if (!articles.length && !content?.trim() && !imageAttachmentId && !linkUrl) return fail(res, "Cần nội dung, ảnh, link hoặc bài viết");
+    const r = await sendBroadcastPost({ name, content, thumbnail, imageAttachmentId, linkUrl, linkTitle, articles, userIds, groupIds, createdBy: req.user?.id });
     ok(res, { ...r, total: userIds.length + groupIds.length });
   } catch (err) { next(err); }
 });
