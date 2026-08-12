@@ -109,6 +109,13 @@ async function getArticleSlice(type = "normal", offset = 0, limit = 20) {
   return res.data?.data?.medias || [];
 }
 
+// Chi tiết 1 bài viết để đọc nội dung (title, cover, body text/ảnh...)
+async function getArticleDetail(id) {
+  const res = await _get(`https://openapi.zalo.me/v2.0/article/getdetail?id=${encodeURIComponent(id)}`);
+  if (res.data?.error !== 0) throw new Error(`Zalo article detail ${res.data?.error}: ${res.data?.message}`);
+  return res.data?.data;
+}
+
 // Tạo bài viết/broadcast lên OA. cover.photo_url & body image url NHẬN URL công khai (Zalo tự host lại).
 async function createArticle(payload) {
   const res = await _post("https://openapi.zalo.me/v2.0/article/create", payload);
@@ -123,4 +130,4 @@ async function removeArticle(id) {
   return true;
 }
 
-module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo, getArticleSlice, createArticle, removeArticle };
+module.exports = { sendText, sendImages, sendFile, uploadImageToZalo, uploadFileToZalo, getArticleSlice, getArticleDetail, createArticle, removeArticle };

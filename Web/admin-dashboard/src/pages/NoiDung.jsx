@@ -50,6 +50,7 @@ function ZaloArticles() {
   const [type, setType] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [detailId, setDetailId] = useState(null)
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['zalo-articles'],
@@ -130,7 +131,7 @@ function ZaloArticles() {
               ) : paged.map((a, i) => {
                 const st = ZALO_ST[a.status] || { label: a.status, cls: 'bg-slate-100 text-slate-500' }
                 return (
-                  <tr key={a.id} className="hover:bg-slate-50/60">
+                  <tr key={a.id} onClick={() => setDetailId(a.id)} className="hover:bg-blue-50/40 cursor-pointer">
                     <td className="px-4 py-3 text-slate-400">{(page - 1) * perPage + i + 1}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmt(a.createDate)}</td>
                     <td className="px-4 py-3">
@@ -150,7 +151,7 @@ function ZaloArticles() {
                     <td className="px-3 py-3 text-center text-slate-500"><span className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3 text-slate-300" />{a.totalComment}</span></td>
                     <td className="px-4 py-3"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${st.cls}`}>{st.label}</span></td>
                     <td className="px-3 py-3">
-                      {a.linkView && <a href={a.linkView} target="_blank" rel="noreferrer" className="p-1.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 inline-flex"><ExternalLink className="h-3.5 w-3.5" /></a>}
+                      {a.linkView && <a href={a.linkView} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 inline-flex"><ExternalLink className="h-3.5 w-3.5" /></a>}
                     </td>
                   </tr>
                 )
@@ -160,8 +161,53 @@ function ZaloArticles() {
         </div>
         <Pager page={page} perPage={perPage} total={items.length} onPage={setPage} />
       </div>
-      <p className="text-[11px] text-slate-400">Dữ liệu thật lấy trực tiếp từ Zalo OA Manager.</p>
+      <p className="text-[11px] text-slate-400">Dữ liệu thật lấy trực tiếp từ Zalo OA Manager. Bấm vào một dòng để đọc nội dung.</p>
+      {detailId && <ArticleReader id={detailId} onClose={() => setDetailId(null)} />}
     </>
+  )
+}
+
+/* ── Modal đọc nội dung bài viết trên OA ── */
+function ArticleReader({ id, onClose }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['zalo-article', id],
+    queryFn: () => api.get(`/api/broadcast/zalo-articles/${id}`).then((r) => r.data),
+  })
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <p className="text-sm font-bold text-slate-700">Nội dung bài viết</p>
+          <div className="flex items-center gap-2">
+            {data?.linkView && <a href={data.linkView} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"><ExternalLink className="h-3.5 w-3.5" /> Mở trên Zalo</a>}
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+          </div>
+        </div>
+        {isLoading ? (
+          <div className="py-24 text-center text-slate-400"><Loader2 className="h-7 w-7 animate-spin mx-auto" /></div>
+        ) : !data ? (
+          <div className="py-24 text-center text-slate-400">Không đọc được bài viết</div>
+        ) : (
+          <article className="p-5 sm:p-6">
+            {data.cover && <img src={data.cover} alt="" className="w-full rounded-lg object-cover mb-4" />}
+            <h1 className="text-2xl font-bold text-slate-800 leading-snug">{data.title}</h1>
+            <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+              {data.author && <span>{data.author}</span>}
+              <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" />{data.totalView}</span>
+              <span className="inline-flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{data.totalLike}</span>
+              <span className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3" />{data.totalComment}</span>
+            </div>
+            {data.description && <p className="mt-3 text-sm text-slate-600 italic border-l-2 border-slate-200 pl-3">{data.description}</p>}
+            <div className="mt-4 space-y-4">
+              {(data.body || []).map((b, i) => b.type === 'text'
+                ? <div key={i} className="text-[15px] text-slate-700 leading-relaxed [&_p]:my-2 [&_img]:rounded-lg [&_img]:my-2 [&_a]:text-blue-600 [&_a]:underline" dangerouslySetInnerHTML={{ __html: b.content }} />
+                : b.url ? <figure key={i}><img src={b.url} alt="" className="w-full rounded-lg" />{b.caption && <figcaption className="text-xs text-slate-400 text-center mt-1">{b.caption}</figcaption>}</figure> : null
+              )}
+            </div>
+          </article>
+        )}
+      </div>
+    </div>
   )
 }
 

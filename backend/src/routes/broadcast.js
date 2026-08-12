@@ -16,7 +16,7 @@ const ScheduledBroadcast = require("../models/mongo/ScheduledBroadcast");
 const { sendToUsers, getJob } = require("../services/broadcastService");
 const { sendBroadcastPost, getJob: getPostJob } = require("../services/broadcastPostService");
 const Broadcast = require("../models/mongo/Broadcast");
-const { uploadImageToZalo, uploadFileToZalo, getArticleSlice, createArticle, removeArticle } = require("../utils/zaloBroadcast");
+const { uploadImageToZalo, uploadFileToZalo, getArticleSlice, getArticleDetail, createArticle, removeArticle } = require("../utils/zaloBroadcast");
 const { uploadFromBuffer } = require("../utils/cloudinaryUpload");
 const env = require("../config/env");
 const { prisma } = require("../config/database");
@@ -649,6 +649,19 @@ router.get("/zalo-articles", async (req, res, next) => {
       }))
       .sort((x, y) => (y.createDate || 0) - (x.createDate || 0));
     ok(res, { items });
+  } catch (err) { next(err); }
+});
+
+// Đọc nội dung 1 bài viết trên OA
+router.get("/zalo-articles/:id", async (req, res, next) => {
+  try {
+    const d = await getArticleDetail(req.params.id);
+    ok(res, {
+      id: d?.id, type: d?.type, title: d?.title, author: d?.author, description: d?.description,
+      cover: d?.cover?.photo_url || "", status: d?.status, body: d?.body || [],
+      totalView: d?.total_view || 0, totalShare: d?.total_share || 0, totalLike: d?.total_like || 0, totalComment: d?.total_comment || 0,
+      linkView: d?.link_view || "",
+    });
   } catch (err) { next(err); }
 });
 
