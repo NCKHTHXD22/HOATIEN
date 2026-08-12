@@ -15,8 +15,8 @@ const logger = require("../utils/logger");
 router.post("/webhook", async (req, res) => {
   try {
     const { sender, message } = req.body;
-    // Dùng sender.id (= user_id, KHỚP getfollowers/danh bạ), KHÔNG dùng user_id_by_app (id khác hệ → sinh follower trùng)
-    const userId = sender?.id || req.body.user_id_by_app;
+    // Dùng sender.id hoặc follower.id (= user_id, KHỚP getfollowers/danh bạ), KHÔNG dùng user_id_by_app (id khác hệ → sinh follower trùng)
+    const userId = sender?.id || req.body.follower?.id || req.body.user_id_by_app;
 
     if (!userId) {
       return res.status(200).json({ error: 0 });

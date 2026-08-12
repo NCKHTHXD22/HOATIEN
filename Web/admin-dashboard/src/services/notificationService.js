@@ -40,8 +40,8 @@ export const uploadAttachment = (notificationId, file) => {
   }).then(r => r.data)
 }
 
-export const getReportStats = (days = 30) =>
-  api.get('/notify/reports', { params: { days } }).then(r => r.data)
+export const getReportStats = (days = 30, source = 'ALL') =>
+  api.get('/notify/reports', { params: { days, source } }).then(r => r.data)
 
 // ── Recipients ─────────────────────────────────────────────
 

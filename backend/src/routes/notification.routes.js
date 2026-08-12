@@ -223,11 +223,12 @@ router.post(
   }
 );
 
-// GET /api/notify/reports  — báo cáo hiệu quả
+// GET /api/notify/reports  — báo cáo hiệu quả (UC14)
 router.get("/reports", authenticate, async (req, res, next) => {
   try {
     const days = parseInt(req.query.days) || 30;
-    const stats = await NotificationRepo.getStats(days);
+    const source = req.query.source || "ALL";
+    const stats = await NotificationService.getComprehensiveReportStats(days, source);
     ok(res, stats);
   } catch (err) { next(err); }
 });

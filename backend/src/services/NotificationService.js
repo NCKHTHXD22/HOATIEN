@@ -141,4 +141,212 @@ async function _sendSms(sdt, content) {
   }
 }
 
-module.exports = { execute, expandRecipients };
+// ── Báo cáo hiệu quả gửi tin & tiếp cận (UC14) ─────────────
+async function getComprehensiveReportStats(days = 30, source = "ALL") {
+  const Broadcast = require("../models/mongo/Broadcast");
+  const BroadcastLog = require("../models/mongo/BroadcastLog");
+
+  const since = new Date(Date.now() - (parseInt(days) || 30) * 24 * 60 * 60 * 1000);
+
+  let totalNotifs = 0;
+  let sentCount = 0;
+  let failedCount = 0;
+  let readCount = 0;
+  let confirmedCount = 0;
+  let pendingCount = 0;
+
+  const channelMap = { ZALO: 0, EMAIL: 0, SMS: 0 };
+  let surveyStats = { totalSurveys: 0, totalResponses: 0, responseRate: 0, list: [] };
+  let campaignList = [];
+
+  // 1. PostgreSQL Data
+  if (["ALL", "ADMIN_NOTIF", "ZALO"].includes(source)) {
+    if (["ALL", "ADMIN_NOTIF"].includes(source)) {
+      totalNotifs += await prisma.notification.count({
+        where: { trangThai: "DA_GUI", sentAt: { gte: since } },
+      });
+    }
+
+    const sendWhere = { createdAt: { gte: since } };
+    if (source === "ZALO") sendWhere.kenh = "ZALO";
+
+    const [sendGroups, channelGroups] = await Promise.all([
+      prisma.notificationSend.groupBy({
+        by: ["trangThai"],
+        _count: { _all: true },
+        where: sendWhere,
+      }),
+      prisma.notificationSend.groupBy({
+        by: ["kenh"],
+        _count: { _all: true },
+        where: sendWhere,
+      }),
+    ]);
+
+    sendGroups.forEach((g) => {
+      if (g.trangThai === "SENT") sentCount += g._count._all;
+      else if (g.trangThai === "FAILED") failedCount += g._count._all;
+      else if (g.trangThai === "READ") readCount += g._count._all;
+      else if (g.trangThai === "CONFIRMED") confirmedCount += g._count._all;
+      else if (g.trangThai === "PENDING") pendingCount += g._count._all;
+    });
+
+    channelGroups.forEach((g) => {
+      channelMap[g.kenh] = (channelMap[g.kenh] || 0) + g._count._all;
+    });
+
+    if (["ALL", "ADMIN_NOTIF"].includes(source)) {
+      const recentNotifs = await prisma.notification.findMany({
+        where: { trangThai: "DA_GUI", sentAt: { gte: since } },
+        select: {
+          id: true, tieuDe: true, sentAt: true, kenhGui: true,
+          admin: { select: { hoTen: true } },
+          _count: { select: { sends: true } },
+        },
+        orderBy: { sentAt: "desc" },
+        take: 10,
+      });
+
+      recentNotifs.forEach((n) => {
+        campaignList.push({
+          id: n.id,
+          tieuDe: n.tieuDe,
+          loai: "Thông báo hành chính",
+          kenh: n.kenhGui.join(", "),
+          nguoiTao: n.admin?.hoTen || "Hệ thống",
+          ngayGui: n.sentAt,
+          luotGui: n._count.sends,
+        });
+      });
+    }
+  }
+
+  // 2. Surveys Data (Postgres)
+  if (["ALL", "SURVEY"].includes(source)) {
+    const [totalSurveys, totalResponses, surveys] = await Promise.all([
+      prisma.survey.count({ where: { createdAt: { gte: since } } }),
+      prisma.surveyResponse.count({ where: { createdAt: { gte: since } } }),
+      prisma.survey.findMany({
+        where: { createdAt: { gte: since } },
+        include: { _count: { select: { responses: true } }, questions: true },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+    ]);
+
+    if (source === "SURVEY") {
+      totalNotifs = totalSurveys;
+    } else {
+      totalNotifs += totalSurveys;
+    }
+
+    const calculatedRate = totalSurveys > 0 ? Math.round((totalResponses / (totalSurveys * 10)) * 100) : 0;
+    surveyStats = {
+      totalSurveys,
+      totalResponses,
+      responseRate: Math.min(100, calculatedRate),
+      list: surveys.map((s) => ({
+        id: s.id,
+        tieuDe: s.tieuDe,
+        active: s.isActive,
+        cauHoiCount: s.questions?.length || 0,
+        responseCount: s._count.responses,
+        createdAt: s.createdAt,
+      })),
+    };
+  }
+
+  // 3. Mongo BroadcastLog (Gửi tin Zalo)
+  if (["ALL", "ZALO"].includes(source)) {
+    try {
+      const logs = await BroadcastLog.find({ timestamp: { $gte: since } }).lean();
+      if (source === "ZALO") {
+        totalNotifs += logs.length;
+      }
+      logs.forEach((log) => {
+        const sent = log.sent || 0;
+        const failed = log.failed || 0;
+        sentCount += sent;
+        failedCount += failed;
+        channelMap.ZALO = (channelMap.ZALO || 0) + (log.recipientCount || (sent + failed));
+
+        campaignList.push({
+          id: log._id.toString(),
+          tieuDe: log.message?.substring(0, 60) || "Gửi tin Zalo hàng loạt",
+          loai: "Gửi tin Zalo",
+          kenh: "ZALO",
+          nguoiTao: "Admin Zalo",
+          ngayGui: log.timestamp,
+          luotGui: log.recipientCount || (sent + failed),
+        });
+      });
+    } catch (e) {
+      logger.warn(`Failed to aggregate BroadcastLog stats: ${e.message}`);
+    }
+  }
+
+  // 4. Mongo Broadcast (Nội dung)
+  if (["ALL", "CONTENT"].includes(source)) {
+    try {
+      const broadcasts = await Broadcast.find({ publishedAt: { $gte: since } }).lean();
+      if (source === "CONTENT") {
+        totalNotifs = broadcasts.length;
+        sentCount = 0;
+        failedCount = 0;
+        readCount = 0;
+      } else {
+        totalNotifs += broadcasts.length;
+      }
+
+      broadcasts.forEach((b) => {
+        const sent = b.sent || 0;
+        const failed = b.failed || 0;
+        const views = b.views || 0;
+
+        sentCount += sent;
+        failedCount += failed;
+        readCount += views;
+        channelMap.ZALO = (channelMap.ZALO || 0) + (b.recipientCount || (sent + failed));
+
+        campaignList.push({
+          id: b._id.toString(),
+          tieuDe: b.name || b.content?.substring(0, 60) || "Bài viết nội dung",
+          loai: "Nội dung",
+          kenh: "ZALO OA",
+          nguoiTao: b.createdBy || "Quản trị viên",
+          ngayGui: b.publishedAt,
+          luotGui: b.recipientCount || (sent + failed),
+          views: views,
+        });
+      });
+    } catch (e) {
+      logger.warn(`Failed to aggregate Broadcast stats: ${e.message}`);
+    }
+  }
+
+  const sendGroups = [
+    { trangThai: "SENT", _count: { _all: sentCount } },
+    { trangThai: "READ", _count: { _all: readCount } },
+    { trangThai: "CONFIRMED", _count: { _all: confirmedCount } },
+    { trangThai: "FAILED", _count: { _all: failedCount } },
+    { trangThai: "PENDING", _count: { _all: pendingCount } },
+  ];
+
+  const channelGroups = Object.keys(channelMap).map((k) => ({
+    kenh: k,
+    _count: { _all: channelMap[k] },
+  }));
+
+  campaignList.sort((a, b) => new Date(b.ngayGui) - new Date(a.ngayGui));
+
+  return {
+    totalNotifs,
+    sendGroups,
+    channelGroups,
+    surveyStats,
+    campaignList: campaignList.slice(0, 15),
+  };
+}
+
+module.exports = { execute, expandRecipients, getComprehensiveReportStats };
+
