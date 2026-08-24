@@ -435,6 +435,24 @@ function SendTab({ followers, groups, syncedAt }) {
                       />
                     </div>
                   </div>
+                  {filteredFollowers.length > 0 && (
+                    <button
+                      onClick={() => setSelectedFollowers(prev => {
+                        const allSelected = filteredFollowers.every(f => prev.has(f.user_id))
+                        const next = new Set(prev)
+                        filteredFollowers.forEach(f => allSelected ? next.delete(f.user_id) : next.add(f.user_id))
+                        return next
+                      })}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left border-b border-slate-100 hover:bg-blue-50 transition-colors"
+                    >
+                      {filteredFollowers.every(f => selectedFollowers.has(f.user_id))
+                        ? <CheckSquare className="h-4 w-4 text-blue-500 shrink-0" />
+                        : <Square className="h-4 w-4 text-slate-300 shrink-0" />}
+                      <span className="text-xs font-semibold text-blue-600">
+                        {filteredFollowers.every(f => selectedFollowers.has(f.user_id)) ? 'Bỏ chọn tất cả' : `Chọn tất cả (${filteredFollowers.length})`}
+                      </span>
+                    </button>
+                  )}
                   <div className="max-h-52 overflow-y-auto">
                     {filteredFollowers.length === 0 && (
                       <p className="py-4 text-center text-xs text-slate-400">
@@ -1357,6 +1375,24 @@ function ScheduleTab({ followers, groups }) {
                       />
                     </div>
                   </div>
+                  {filteredFollowers.length > 0 && (
+                    <button
+                      onClick={() => setSelectedFollowers(prev => {
+                        const allSelected = filteredFollowers.every(f => prev.has(f.user_id))
+                        const next = new Set(prev)
+                        filteredFollowers.forEach(f => allSelected ? next.delete(f.user_id) : next.add(f.user_id))
+                        return next
+                      })}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left border-b border-slate-100 hover:bg-blue-50 transition-colors"
+                    >
+                      {filteredFollowers.every(f => selectedFollowers.has(f.user_id))
+                        ? <CheckSquare className="h-4 w-4 text-blue-500 shrink-0" />
+                        : <Square className="h-4 w-4 text-slate-300 shrink-0" />}
+                      <span className="text-xs font-semibold text-blue-600">
+                        {filteredFollowers.every(f => selectedFollowers.has(f.user_id)) ? 'Bỏ chọn tất cả' : `Chọn tất cả (${filteredFollowers.length})`}
+                      </span>
+                    </button>
+                  )}
                   <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
                     {filteredFollowers.slice(0, 50).map(f => (
                       <label key={f.user_id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer">
