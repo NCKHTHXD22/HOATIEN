@@ -15,11 +15,20 @@ const EXCEL_PATH = path.resolve(args[0] || path.join(__dirname, "../../Documents
 
 const VAI_TRO_MAP = { "Tổ trưởng": "TO_TRUONG", "Tổ phó": "TO_PHO", "Thành viên": "THANH_VIEN" };
 
+// Excel lưu SĐT dạng số → mất số 0 đầu (905280945). Số di động VN chuẩn có 10 số, bắt đầu bằng 0.
+function normalizePhone(raw) {
+  if (raw == null || raw === "") return null;
+  let s = String(raw).trim();
+  if (/^\d{9}$/.test(s)) s = "0" + s;
+  return s;
+}
+
 function normalize(s) {
   return (s || "")
     .toString()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/gi, "d")
     .toLowerCase()
     .replace(/^thon\s+/, "")
     .replace(/[^a-z0-9]/g, "");
@@ -48,7 +57,7 @@ function parseGroups(rows) {
       hoTen: hoTen.toString().trim(),
       chucDanh: (chucDanh || "").toString().trim(),
       vaiTro: VAI_TRO_MAP[vaiTroRaw] || "THANH_VIEN",
-      sdt: sdt ? sdt.toString().trim() : null,
+      sdt: normalizePhone(sdt),
       ghiChu: ghiChu ? ghiChu.toString().trim() : null,
     });
   }
