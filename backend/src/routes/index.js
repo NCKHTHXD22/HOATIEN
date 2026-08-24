@@ -2,6 +2,7 @@ const router = require("express").Router();
 
 router.use("/auth",       require("./auth.routes"));
 router.use("/villages",   require("./village.routes"));
+router.use("/village-officials", require("./villageOfficial.routes"));
 router.use("/households", require("./household.routes"));
 router.use("/members",    require("./member.routes"));
 router.use("/movements",  require("./movement.routes"));

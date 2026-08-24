@@ -76,17 +76,36 @@ enum SurveyQType {
 // ─── MODELS ──────────────────────────────────────────────
 
 model Village {
-  id          String      @id @default(cuid())
-  ma          String      @unique
+  id          String            @id @default(cuid())
+  ma          String            @unique
   ten         String
   truongThon  String?
   moTa        String?
   households  Household[]
-  admins      AdminUser[] @relation("AdminVillages")
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  admins      AdminUser[]       @relation("AdminVillages")
+  officials   VillageOfficial[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@map("villages")
+}
+
+// Ban lãnh đạo / Tổ Công nghệ số cộng đồng (CNSCĐ) của từng thôn
+model VillageOfficial {
+  id        String   @id @default(cuid())
+  village   Village  @relation(fields: [villageId], references: [id], onDelete: Cascade)
+  villageId String
+  hoTen     String
+  chucDanh  String // Trưởng thôn, Bí thư Chi đoàn, Cảnh sát khu vực thôn...
+  vaiTro    String   @default("THANH_VIEN") // TO_TRUONG | TO_PHO | THANH_VIEN (vai trò trong Tổ CNSCĐ)
+  sdt       String?
+  ghiChu    String?
+  thuTu     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([villageId])
+  @@map("village_officials")
 }
 
 model AdminUser {

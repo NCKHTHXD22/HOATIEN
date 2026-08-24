@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen,
   Users, BarChart3, Settings, LogOut, MapPin,
-  Bell, UsersRound, ClipboardList, PieChart, ArrowRightLeft, Link2, Megaphone,
+  Bell, UsersRound, ClipboardList, PieChart, ArrowRightLeft, Link2, Megaphone, Crown,
 } from 'lucide-react'
 import clsx from 'clsx'
 import hoaTienLogo from '../assets/hoa-tien-logo.jpg'
@@ -18,6 +18,7 @@ const navGroups = [
     items: [
       { to: '/ho-so',     icon: FolderOpen,     label: 'Hồ sơ dân cư' },
       { to: '/thon-xom',  icon: MapPin,         label: 'Thôn / Địa bàn' },
+      { to: '/lanh-dao-thon', icon: Crown,      label: 'Lãnh đạo thôn' },
       { to: '/bien-dong', icon: ArrowRightLeft, label: 'Biến động dân cư' },
     ],
   },
