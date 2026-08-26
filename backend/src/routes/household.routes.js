@@ -138,7 +138,7 @@ router.post(
   "/",
   requireRole("SUPER_ADMIN", "ADMIN_VILLAGE"),
   [
-    body("soHoKhau").notEmpty().withMessage("Số hộ khẩu là bắt buộc"),
+    body("soHoKhau").optional().isString(),
     body("diaChi").notEmpty().withMessage("Địa chỉ là bắt buộc"),
     body("villageId").notEmpty().withMessage("Thôn là bắt buộc"),
     body("loaiHo").optional().isIn(["THUONG_TRU", "TAM_TRU", "TAM_VANG"]),

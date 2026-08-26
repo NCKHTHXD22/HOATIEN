@@ -21,12 +21,42 @@ async function getById(id) {
   return h;
 }
 
+function generateVillageAcronym(villageName) {
+  if (!villageName) return "HK";
+  const name = villageName.replace(/^Thôn\s+/i, '').trim();
+  const deaccent = str => String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+  return name.split(/\s+/).map(word => deaccent(word)[0].toUpperCase()).join('');
+}
+
 async function create({ soHoKhau, diaChi, to, lat, lng, trangThai, loaiHo, villageId, members = [] }, performedBy) {
-  const exists = await HouseholdRepo.findBySoHoKhau(soHoKhau);
-  if (exists) throw new Error("Số hộ khẩu đã tồn tại");
+  let finalSoHoKhau = soHoKhau;
+  
+  if (!finalSoHoKhau) {
+    const village = await prisma.village.findUnique({ where: { id: villageId } });
+    if (!village) throw new Error("Không tìm thấy thôn");
+    const prefix = generateVillageAcronym(village.ten);
+    
+    const households = await prisma.household.findMany({
+      where: { soHoKhau: { startsWith: `${prefix}-` } },
+      select: { soHoKhau: true }
+    });
+    
+    let maxSeq = 0;
+    for (const hh of households) {
+      const match = hh.soHoKhau.match(new RegExp(`^${prefix}-(\\d+)$`));
+      if (match) {
+        const seq = parseInt(match[1], 10);
+        if (seq > maxSeq) maxSeq = seq;
+      }
+    }
+    finalSoHoKhau = `${prefix}-${String(maxSeq + 1).padStart(3, '0')}`;
+  } else {
+    const exists = await HouseholdRepo.findBySoHoKhau(finalSoHoKhau);
+    if (exists) throw new Error("Số hộ khẩu đã tồn tại");
+  }
 
   const household = await HouseholdRepo.create(
-    { soHoKhau, diaChi, to, lat, lng, trangThai, loaiHo, villageId },
+    { soHoKhau: finalSoHoKhau, diaChi, to, lat, lng, trangThai, loaiHo, villageId },
     members.map(normalizeMember)
   );
 
@@ -305,7 +335,7 @@ async function commitImport(parsed, villageId, performedBy) {
   const stats = { newHouseholds: 0, added: 0, updated: 0, skipped: 0 };
   const touched = new Set();
   const toNum = String(to).match(/\d+/)?.[0] || "";
-  const prefix = `${village.ma}${toNum ? "-T" + toNum : ""}`;
+  const prefix = generateVillageAcronym(village.ten);
   const diaChi = [to, parsed.villageName || village.ten, "Xã Hòa Tiến"].filter(Boolean).join(", ");
   let seq = await prisma.household.count({ where: { villageId: village.id, soHoKhau: { startsWith: prefix + "-" } } });
 

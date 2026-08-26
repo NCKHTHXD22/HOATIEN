@@ -183,7 +183,6 @@ export default function HoSo() {
   /* ── Household CRUD ── */
   const openAdd = () => { setAddForm(EMPTY_HH); setAddErr(''); setShowAdd(true) }
   const handleAdd = async () => {
-    if (!addForm.soHoKhau.trim()) { setAddErr('Vui lòng nhập số hộ khẩu'); return }
     if (!addForm.diaChi.trim())   { setAddErr('Vui lòng nhập địa chỉ'); return }
     if (!addForm.villageId)       { setAddErr('Vui lòng chọn thôn'); return }
     setAddSaving(true); setAddErr('')
@@ -462,7 +461,7 @@ export default function HoSo() {
       <Modal title="Thêm hộ dân mới" open={showAdd} onClose={() => setShowAdd(false)}
         footer={<><SecondaryBtn onClick={() => setShowAdd(false)}>Hủy</SecondaryBtn><PrimaryBtn onClick={handleAdd} disabled={addSaving}>{addSaving ? 'Đang lưu...' : 'Thêm hộ dân'}</PrimaryBtn></>}>
         {addErr && <ErrBox msg={addErr} />}
-        <FormInput label="Số hộ khẩu" required placeholder="VD: HK-001" value={addForm.soHoKhau} onChange={e => setAddForm(f => ({ ...f, soHoKhau: e.target.value }))} />
+        <FormInput label="Số hộ khẩu" placeholder="Để trống để tự động tạo (VD: CN-001)" value={addForm.soHoKhau} onChange={e => setAddForm(f => ({ ...f, soHoKhau: e.target.value }))} />
         <FormInput label="Địa chỉ" required placeholder="Số nhà, đường, thôn..." value={addForm.diaChi} onChange={e => setAddForm(f => ({ ...f, diaChi: e.target.value }))} />
         <FormInput label="Tổ" placeholder="VD: Tổ 1" value={addForm.to} onChange={e => setAddForm(f => ({ ...f, to: e.target.value }))} />
         <Select label="Thôn" required value={addForm.villageId} onChange={v => setAddForm(f => ({ ...f, villageId: v }))} options={villageOpts} />
