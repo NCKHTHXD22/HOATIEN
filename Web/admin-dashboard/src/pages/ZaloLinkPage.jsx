@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
@@ -923,7 +924,7 @@ export default function ZaloLinkPage() {
       </>
       )}
 
-      {showCreateModal && (
+      {showCreateModal && createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 animate-in fade-in zoom-in-95">
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Tạo Hộ Khẩu Mới</h3>
@@ -989,7 +990,7 @@ export default function ZaloLinkPage() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   )
 }
