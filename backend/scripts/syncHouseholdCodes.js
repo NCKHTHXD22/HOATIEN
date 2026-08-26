@@ -12,6 +12,16 @@ async function main() {
   const villages = await prisma.village.findMany({ orderBy: { ten: 'asc' } });
   let totalUpdated = 0;
 
+  // Bước 1: Đổi tất cả sang mã tạm thời trên toàn bộ database để tránh lỗi trùng mã chéo giữa các thôn
+  console.log("Đang đổi tất cả mã hiện tại sang mã tạm thời...");
+  const allHouseholds = await prisma.household.findMany({ select: { id: true } });
+  for (const hh of allHouseholds) {
+    await prisma.household.update({
+      where: { id: hh.id },
+      data: { soHoKhau: `TMP-${hh.id}` }
+    });
+  }
+  
   for (const village of villages) {
     const prefix = generateVillageAcronym(village.ten);
     console.log(`\nĐang đồng bộ Thôn: ${village.ten} (Tiền tố: ${prefix})`);
@@ -24,14 +34,6 @@ async function main() {
     console.log(` - Tìm thấy ${households.length} hộ khẩu`);
     if (households.length === 0) continue;
     
-    // Bước 1: Đổi tất cả sang mã tạm thời (để tránh lỗi Unique Constraint khi đụng mã cũ)
-    for (const hh of households) {
-      await prisma.household.update({
-        where: { id: hh.id },
-        data: { soHoKhau: `TMP-${hh.id.substring(0, 8)}` }
-      });
-    }
-
     // Bước 2: Đánh số lại chuẩn từ 1
     let seq = 1;
     for (const hh of households) {
