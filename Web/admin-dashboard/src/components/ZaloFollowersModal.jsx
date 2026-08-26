@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, RefreshCw, Send, Link as LinkIcon, Unlink, UserCheck, X } from 'lucide-react'
 import { syncFollowers, getFollowers, sendDirectMessage, searchMembers, linkFollower } from '../services/zaloService'
+import * as householdService from '../services/householdService'
+import * as villageService from '../services/villageService'
 
 export default function ZaloFollowersModal({ open, onClose }) {
   const [followers, setFollowers] = useState([])
@@ -15,6 +17,58 @@ export default function ZaloFollowersModal({ open, onClose }) {
   
   // Link modal
   const [linkModal, setLinkModal] = useState({ open: false, follower: null, searchQ: '', results: [], linking: false })
+
+  // Create household from Zalo modal
+  const [villages, setVillages] = useState([])
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [createForm, setCreateForm] = useState({ hoTen: '', sdt: '', villageId: '', diaChi: '' })
+  const [createSaving, setCreateSaving] = useState(false)
+  const [createErr, setCreateErr] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      villageService.getAll().then(r => setVillages(r.data.data || [])).catch(() => {})
+    }
+  }, [open])
+
+  const handleCreateAndLink = async () => {
+    if (!createForm.hoTen.trim()) return setCreateErr('Vui lòng nhập tên chủ hộ')
+    if (!createForm.villageId) return setCreateErr('Vui lòng chọn thôn')
+    if (!createForm.diaChi.trim()) return setCreateErr('Vui lòng nhập địa chỉ chi tiết')
+    
+    setCreateSaving(true)
+    setCreateErr('')
+    try {
+      // 1. Tạo Hộ Khẩu & Chủ Hộ
+      const payload = {
+        diaChi: createForm.diaChi,
+        villageId: createForm.villageId,
+        soHoKhau: '', // Tự động sinh
+        members: [{ 
+          hoTen: createForm.hoTen, 
+          sdt: createForm.sdt || null, 
+          laChuHo: true, 
+          quanHeChuHo: 'Chủ hộ' 
+        }]
+      }
+      const res = await householdService.create(payload)
+      const newMemberId = res.data?.data?.members?.[0]?.id
+      
+      if (!newMemberId) throw new Error('Không lấy được ID Chủ hộ vừa tạo')
+      
+      // 2. Liên kết Zalo
+      await linkFollower(linkModal.follower.userId, newMemberId)
+      
+      alert('Tạo hồ sơ và liên kết thành công!')
+      setShowCreateForm(false)
+      setLinkModal({ open: false, follower: null, searchQ: '', results: [], linking: false })
+      load()
+    } catch (e) {
+      setCreateErr(e.response?.data?.message || e.message || 'Có lỗi xảy ra')
+    } finally {
+      setCreateSaving(false)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -230,7 +284,62 @@ export default function ZaloFollowersModal({ open, onClose }) {
               </div>
             </div>
             
-            <div className="p-5 overflow-y-auto">
+            <div className="p-5 overflow-y-auto flex-1">
+              {showCreateForm ? (
+                <div className="space-y-4 animate-in fade-in zoom-in-95">
+                  <h3 className="font-semibold text-gray-900 border-b pb-2">Tạo Hộ Khẩu Mới</h3>
+                  {createErr && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{createErr}</div>}
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Họ tên Chủ Hộ <span className="text-red-500">*</span></label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      value={createForm.hoTen}
+                      onChange={e => setCreateForm(p => ({ ...p, hoTen: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Số điện thoại</label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      value={createForm.sdt}
+                      onChange={e => setCreateForm(p => ({ ...p, sdt: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Thôn <span className="text-red-500">*</span></label>
+                    <select
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      value={createForm.villageId}
+                      onChange={e => setCreateForm(p => ({ ...p, villageId: e.target.value }))}
+                    >
+                      <option value="">-- Chọn thôn --</option>
+                      {villages.map(v => <option key={v.id} value={v.id}>{v.ten}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Địa chỉ chi tiết <span className="text-red-500">*</span></label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      placeholder="VD: Tổ 1"
+                      value={createForm.diaChi}
+                      onChange={e => setCreateForm(p => ({ ...p, diaChi: e.target.value }))}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button onClick={() => setShowCreateForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Quay lại</button>
+                    <button
+                      onClick={handleCreateAndLink}
+                      disabled={createSaving}
+                      className="px-5 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {createSaving ? 'Đang xử lý...' : 'Lưu & Liên kết'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="relative mb-4">
                 <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                 <input
@@ -244,7 +353,23 @@ export default function ZaloFollowersModal({ open, onClose }) {
               {linkModal.searchQ ? (
                 <div className="space-y-2">
                   {linkModal.results.length === 0 ? (
-                    <p className="text-center text-sm text-gray-500 py-4">Không tìm thấy ai</p>
+                    <div className="text-center py-4">
+                      <p className="text-sm text-gray-500 mb-3">Không tìm thấy nhân khẩu nào khớp với từ khóa</p>
+                      <button
+                        onClick={() => {
+                          setCreateForm({
+                            hoTen: linkModal.follower?.displayName || '',
+                            sdt: linkModal.searchQ.match(/^[0-9]+$/) ? linkModal.searchQ : '',
+                            villageId: '',
+                            diaChi: ''
+                          })
+                          setShowCreateForm(true)
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700"
+                      >
+                        Tạo Hộ Sơ Mới & Liên Kết
+                      </button>
+                    </div>
                   ) : (
                     linkModal.results.map(m => (
                       <div key={m.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-blue-50">
@@ -265,6 +390,8 @@ export default function ZaloFollowersModal({ open, onClose }) {
                 </div>
               ) : (
                 <p className="text-center text-sm text-gray-500 py-4">Gõ tên để tìm kiếm nhân khẩu tương ứng</p>
+              )}
+                </>
               )}
             </div>
 
