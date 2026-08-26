@@ -744,7 +744,7 @@ export default function ZaloLinkPage() {
   ]
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="w-full space-y-5">
       {/* Header */}
       <div>
         <h1 className="text-[1.7rem] font-extrabold text-foreground tracking-tight">
