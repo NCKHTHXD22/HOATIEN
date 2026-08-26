@@ -27,7 +27,7 @@ function Avatar({ name, avatar }) {
   )
 }
 
-function MemberCombobox({ onSelect, disabled }) {
+function MemberCombobox({ onSelect, disabled, onCreateNew }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const dq = useDebounce(query, 300)
@@ -70,7 +70,18 @@ function MemberCombobox({ onSelect, disabled }) {
       {open && dq.length >= 2 && (
         <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
           {!data || data.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-slate-400 text-center">Không tìm thấy</p>
+            <div className="py-2 text-center">
+              <p className="px-3 py-1 text-xs text-slate-400">Không tìm thấy</p>
+              {onCreateNew && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(''); setOpen(false); onCreateNew(dq); }}
+                  className="mt-1 px-3 py-1.5 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded hover:bg-blue-100 transition-colors"
+                >
+                  + Tạo hồ sơ mới
+                </button>
+              )}
+            </div>
           ) : (
             data.map((m) => (
               <button
@@ -93,7 +104,7 @@ function MemberCombobox({ onSelect, disabled }) {
   )
 }
 
-function FollowerRow({ follower, onLink, onUnlink, onRequestInfo, linking, unlinking, requesting, checked, onToggleCheck }) {
+function FollowerRow({ follower, onLink, onUnlink, onRequestInfo, linking, unlinking, requesting, checked, onToggleCheck, onCreateNew }) {
   const [selected, setSelected] = useState(null)
   const linked = follower.linkedMember
 
@@ -135,7 +146,7 @@ function FollowerRow({ follower, onLink, onUnlink, onRequestInfo, linking, unlin
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <MemberCombobox onSelect={setSelected} disabled={linking} />
+            <MemberCombobox onSelect={setSelected} disabled={linking} onCreateNew={onCreateNew ? (q) => onCreateNew(follower, q) : undefined} />
             {selected && (
               <div className="flex items-center gap-1 shrink-0 max-w-[140px] bg-blue-50 border border-blue-100 rounded-md px-2 py-1">
                 <span className="text-xs font-semibold text-blue-700 truncate">{selected.hoTen}</span>
@@ -536,6 +547,65 @@ export default function ZaloLinkPage() {
   const [bulkSending, setBulkSending] = useState(false)
   const [scanPolling, setScanPolling] = useState(false)
 
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createFollower, setCreateFollower] = useState(null)
+  const [createForm, setCreateForm] = useState({ hoTen: '', sdt: '', villageId: '', diaChi: '' })
+  const [createSaving, setCreateSaving] = useState(false)
+  const [createErr, setCreateErr] = useState('')
+  const [villages, setVillages] = useState([])
+
+  useEffect(() => {
+    api.get('/api/villages').then(r => setVillages(r.data?.data || [])).catch(() => {})
+  }, [])
+
+  const openCreateModal = (follower, query) => {
+    setCreateFollower(follower)
+    setCreateForm({
+      hoTen: follower.display_name || '',
+      sdt: query.match(/^[0-9]+$/) ? query : '',
+      villageId: '',
+      diaChi: ''
+    })
+    setCreateErr('')
+    setShowCreateModal(true)
+  }
+
+  const handleCreateAndLink = async () => {
+    if (!createForm.hoTen.trim()) return setCreateErr('Vui lòng nhập tên chủ hộ')
+    if (!createForm.villageId) return setCreateErr('Vui lòng chọn thôn')
+    if (!createForm.diaChi.trim()) return setCreateErr('Vui lòng nhập địa chỉ chi tiết')
+    
+    setCreateSaving(true)
+    setCreateErr('')
+    try {
+      const payload = {
+        diaChi: createForm.diaChi,
+        villageId: createForm.villageId,
+        soHoKhau: '',
+        members: [{ 
+          hoTen: createForm.hoTen, 
+          sdt: createForm.sdt || null, 
+          laChuHo: true, 
+          quanHeChuHo: 'Chủ hộ' 
+        }]
+      }
+      const res = await api.post('/api/households', payload)
+      const newMemberId = res.data?.data?.members?.[0]?.id
+      
+      if (!newMemberId) throw new Error('Không lấy được ID Chủ hộ')
+      
+      await api.post(`/api/broadcast/followers/${createFollower.user_id}/link`, { memberId: newMemberId })
+      
+      toast.success('Tạo hồ sơ và liên kết thành công!')
+      setShowCreateModal(false)
+      queryClient.invalidateQueries({ queryKey: ['zalo-followers-linked'] })
+    } catch (e) {
+      setCreateErr(e.response?.data?.message || e.response?.data?.error || e.message || 'Lỗi xử lý')
+    } finally {
+      setCreateSaving(false)
+    }
+  }
+
   const { data, isLoading } = useQuery({
     queryKey: ['zalo-followers-linked'],
     queryFn: () => api.get('/api/broadcast/followers').then(r => r.data),
@@ -844,12 +914,81 @@ export default function ZaloLinkPage() {
                 requesting={requestingId === f.user_id}
                 checked={selectedIds.has(f.user_id)}
                 onToggleCheck={toggleCheck}
+                onCreateNew={openCreateModal}
               />
             ))}
           </div>
         )}
       </div>
       </>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 animate-in fade-in zoom-in-95">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Tạo Hộ Khẩu Mới</h3>
+            
+            <div className="flex items-center gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+              <Avatar name={createFollower?.display_name} avatar={createFollower?.avatar} />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{createFollower?.display_name || 'Không tên'}</p>
+                <p className="text-[11px] font-mono text-slate-500">{createFollower?.user_id}</p>
+              </div>
+            </div>
+
+            {createErr && <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">{createErr}</div>}
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Họ tên Chủ Hộ <span className="text-red-500">*</span></label>
+                <input
+                  className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={createForm.hoTen}
+                  onChange={e => setCreateForm(p => ({ ...p, hoTen: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Số điện thoại</label>
+                <input
+                  className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={createForm.sdt}
+                  onChange={e => setCreateForm(p => ({ ...p, sdt: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Thôn <span className="text-red-500">*</span></label>
+                <select
+                  className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={createForm.villageId}
+                  onChange={e => setCreateForm(p => ({ ...p, villageId: e.target.value }))}
+                >
+                  <option value="">-- Chọn thôn --</option>
+                  {villages.map(v => <option key={v.id} value={v.id}>{v.ten}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Địa chỉ chi tiết <span className="text-red-500">*</span></label>
+                <input
+                  className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  placeholder="VD: Tổ 1"
+                  value={createForm.diaChi}
+                  onChange={e => setCreateForm(p => ({ ...p, diaChi: e.target.value }))}
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setShowCreateModal(false)} className="h-9 px-4 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Hủy</button>
+              <button
+                onClick={handleCreateAndLink}
+                disabled={createSaving}
+                className="flex items-center gap-2 h-9 px-4 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {createSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</> : 'Lưu & Liên kết'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
