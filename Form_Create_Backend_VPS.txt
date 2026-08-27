@@ -1,0 +1,209 @@
+rByJGV2hbot87FaYEFvhgV5
+
+3ABSP3WQ23NQHPPMB9YyvF8
+
+Phase 1 — SSH vào server & setup môi trường
+1.1. Kết nối SSH
+
+ssh root@123.30.48.104
+# Nhập password: 3ABSP3WQ23NQHPPMB9YyvF8
+Hoặc dùng SSH key đã cấu hình:
+
+
+ssh -i ~/.ssh/ssh-vonguyenan-dxv-04032004 root@123.30.48.104
+1.2. Update Ubuntu & cài công cụ cần thiết
+
+apt update && apt upgrade -y
+apt install -y git curl wget nginx ufw build-essential
+1.3. Cài Node.js 20 LTS
+
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+node -v   # phải hiện v20.x.x
+npm -v
+1.4. Cài PM2 (process manager)
+
+npm install -g pm2
+pm2 startup systemd -u root --hp /root
+# Copy và chạy lệnh mà PM2 in ra (systemctl enable pm2-root)
+Phase 2 — Clone code lên server
+2.1. Tạo thư mục và clone
+
+mkdir -p /var/www/hoatien
+cd /var/www/hoatien
+git clone https://github.com/NCKHTHXD22/HOATIEN.git .
+Nếu repo private: Cần tạo GitHub Personal Access Token và clone bằng:
+
+
+git clone https://<TOKEN>@github.com/NCKHTHXD22/HOATIEN.git .
+2.2. Tạo file .env cho backend
+
+cp /var/www/hoatien/backend/.env.example /var/www/hoatien/backend/.env
+nano /var/www/hoatien/backend/.env
+Điền đầy đủ các giá trị (copy từ .env hiện tại trên máy local hoặc từ Render):
+
+
+PORT=3000
+NODE_ENV=production
+
+DATABASE_URL=postgresql://...         # Neon URL giữ nguyên
+MONGODB_URI=mongodb+srv://...         # Atlas URI giữ nguyên
+MONGODB_DB_NAME=hoa_tien
+
+JWT_SECRET=<giá trị hiện tại>
+JWT_EXPIRES_IN=7d
+
+ZALO_APP_ID=...
+ZALO_APP_SECRET=...
+ZALO_OA_ACCESS_TOKEN=...
+ZALO_OA_REFRESH_TOKEN=...
+ZALO_WEBHOOK_SECRET=...
+ZALO_VERIFIER_CODE=...
+
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+
+SMTP_USER=...
+SMTP_PASS=...
+
+# CORS: cho phép cả IP lẫn domain (nếu có)
+CORS_ORIGINS=http://123.30.48.104,https://yourdomain.com
+Phase 3 — Deploy Backend
+3.1. Install dependencies & chạy migration
+
+cd /var/www/hoatien/backend
+npm install --omit=dev
+npx prisma generate
+npx prisma db push    # push schema lên Neon DB (không dùng migrate deploy vì không có thư mục migrations)
+3.2. Khởi động backend với PM2
+
+pm2 start server.js --name hoatien-backend --cwd /var/www/hoatien/backend
+pm2 save
+pm2 logs hoatien-backend    # kiểm tra không có lỗi
+Kiểm tra backend đang chạy:
+
+
+curl http://localhost:3000/api/auth/me
+# Nếu trả về JSON (dù là 401) → backend OK
+Phase 4 — Build & Deploy Frontend
+4.1. Sửa vite.config.js trước khi build production
+Trên máy local, mở Web/admin-dashboard/vite.config.js — phần proxy chỉ dùng cho dev, không ảnh hưởng production build. Không cần sửa gì cho file này.
+
+Tuy nhiên cần kiểm tra file Web/admin-dashboard/src/services/api.js — đảm bảo baseURL là /api (relative), không phải hardcode IP:
+
+
+// Đúng (relative URL, Nginx sẽ proxy)
+const api = axios.create({ baseURL: '/api' });
+4.2. Build frontend trên máy local
+
+cd Web/admin-dashboard
+npm install
+npm run build
+# Sinh ra thư mục dist/
+4.3. Upload dist/ lên server
+Cách 1 — dùng scp:
+
+
+scp -r dist/ root@123.30.48.104:/var/www/hoatien/Web/admin-dashboard/dist
+Cách 2 — build thẳng trên server (cần Node trên server):
+
+
+# Trên server
+cd /var/www/hoatien/Web/admin-dashboard
+npm install
+npm run build
+Phase 5 — Cấu hình Nginx
+5.1. Tạo Nginx config
+
+nano /etc/nginx/sites-available/hoatien
+Dán nội dung sau:
+
+
+server {
+    listen 80;
+    server_name 123.30.48.104;   # đổi thành domain nếu có
+
+    root /var/www/hoatien/Web/admin-dashboard/dist;
+    index index.html;
+
+    # Serve React SPA (handle client-side routing)
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests sang backend
+    location /api/ {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # Tối ưu static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+5.2. Kích hoạt và test Nginx
+
+ln -s /etc/nginx/sites-available/hoatien /etc/nginx/sites-enabled/
+nginx -t          # kiểm tra syntax
+systemctl reload nginx
+Phase 6 — Firewall
+
+ufw allow OpenSSH
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw enable
+ufw status
+Không mở port 3000 ra ngoài — backend chỉ truy cập qua Nginx.
+
+Phase 7 (Optional) — SSL/HTTPS nếu có domain
+Nếu trỏ domain về 123.30.48.104:
+
+
+apt install -y certbot python3-certbot-nginx
+certbot --nginx -d yourdomain.com
+# Certbot tự sửa Nginx config và cài auto-renew
+Sau đó cập nhật .env backend:
+
+
+CORS_ORIGINS=https://yourdomain.com
+Phase 8 — Update code sau này (deploy lại)
+Tạo script deploy nhanh tại /var/www/hoatien/deploy.sh:
+
+
+#!/bin/bash
+set -e
+echo "=== Pulling code ==="
+git pull origin main
+
+echo "=== Backend: install & migrate ==="
+cd /var/www/hoatien/backend
+npm install --omit=dev
+npx prisma generate
+npx prisma db push
+pm2 restart hoatien-backend
+
+echo "=== Frontend: build ==="
+cd /var/www/hoatien/Web/admin-dashboard
+npm install
+npm run build
+
+echo "=== Reload Nginx ==="
+systemctl reload nginx
+
+echo "=== Done ==="
+
+chmod +x /var/www/hoatien/deploy.sh
+Mỗi lần update code chỉ cần chạy: bash /var/www/hoatien/deploy.sh
+
