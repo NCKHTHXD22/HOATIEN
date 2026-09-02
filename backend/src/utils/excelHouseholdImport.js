@@ -1,6 +1,7 @@
 // Parser Excel "Danh sách khảo sát tiêu chí hộ gia đình" (định dạng thôn/tổ của xã Hòa Tiến)
 // → nhóm thành Hộ + Nhân khẩu. Chỉ lấy dữ liệu dân cư cốt lõi (bỏ qua các cột khảo sát chuyển đổi số).
 const ExcelJS = require("exceljs");
+const { toProperName } = require("./normalize");
 
 const NO_INFO = "Không có thông tin";
 const pad3 = (n) => String(n).padStart(3, "0");
@@ -152,7 +153,7 @@ async function parseHouseholdExcel(buffer) {
     }
 
     cur.members.push({
-      hoTen: name,
+      hoTen: toProperName(name),
       ngaySinh: iso,
       gioiTinh,
       cccd,
