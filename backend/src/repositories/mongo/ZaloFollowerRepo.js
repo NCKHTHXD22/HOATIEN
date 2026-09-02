@@ -40,12 +40,17 @@ const findAll = () => ZaloFollower.find().sort({ displayName: 1 }).lean();
 
 const findByUserId = (userId) => ZaloFollower.findOne({ userId }).lean();
 
-const setLink = (userId, memberId) =>
-  ZaloFollower.findOneAndUpdate(
-    { userId },
-    { $set: { linkedMemberId: memberId }, $setOnInsert: { displayName: "", avatar: "" } },
-    { new: true, upsert: true }
-  );
+// profile (tùy chọn): { displayName, avatar } — điền tên/avatar ngay khi liên kết,
+// tránh follower mới bị "Không tên". Chỉ ghi khi có giá trị (không đè tên cũ bằng rỗng).
+const setLink = (userId, memberId, profile = {}) => {
+  const $set = { linkedMemberId: memberId };
+  const $setOnInsert = {};
+  if (profile.displayName) $set.displayName = profile.displayName; else $setOnInsert.displayName = "";
+  if (profile.avatar) $set.avatar = profile.avatar; else $setOnInsert.avatar = "";
+  const update = { $set };
+  if (Object.keys($setOnInsert).length) update.$setOnInsert = $setOnInsert;
+  return ZaloFollower.findOneAndUpdate({ userId }, update, { new: true, upsert: true });
+};
 
 // Lưu SĐT dân tự chia sẻ (form request_user_info)
 const setPhone = (userId, phone) =>

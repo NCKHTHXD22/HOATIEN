@@ -443,7 +443,7 @@ async function getProfileByPhone(phone) {
     const data = encodeURIComponent(JSON.stringify({ phone: normalized }));
     const result = await _zaloGet(`https://openapi.zalo.me/v2.0/oa/getprofile?data=${data}`);
     if (result?.error === 0 && result.data?.user_id) {
-      return { userId: String(result.data.user_id), displayName: result.data.display_name || "", status: "follower" };
+      return { userId: String(result.data.user_id), displayName: result.data.display_name || "", avatar: result.data.avatar || "", status: "follower" };
     }
     // -213/-205/-14: có Zalo nhưng chưa follow OA
     if ([-213, -205, -14].includes(result?.error)) {
@@ -478,7 +478,7 @@ async function _runAutoLink(jobId, villageId) {
           results.errors.push({ hoTen: member.hoTen, sdt: member.sdt, reason: `Zalo ID đã liên kết với ${conflict.hoTen}` });
         } else {
           await Promise.all([
-            ZaloFollowerRepo.setLink(r.userId, member.id),
+            ZaloFollowerRepo.setLink(r.userId, member.id, { displayName: r.displayName, avatar: r.avatar }),
             prisma.member.update({ where: { id: member.id }, data: { zaloUserId: r.userId } }),
           ]);
           results.linked.push({ hoTen: member.hoTen, sdt: member.sdt, zaloId: r.userId, displayName: r.displayName });
