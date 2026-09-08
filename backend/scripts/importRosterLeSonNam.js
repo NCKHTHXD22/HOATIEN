@@ -1,11 +1,13 @@
 // Import roster "Kích hoạt BHYT Lệ Sơn Nam.xlsx" → bổ sung nhân khẩu/hộ vào thôn Lệ Sơn Nam.
 // File cột: STT | HỌ TÊN | HỌ TÊN CHỦ HỘ | SĐT | ĐỊA CHỈ | GHI CHÚ (header dòng 1).
-// - Nhóm theo TÊN chủ hộ; nếu chủ hộ không có dòng riêng → tạo bản ghi chủ hộ từ cột CHỦ HỘ.
-// - Dedup theo SĐT + họ tên (chuẩn hóa) so với dân hiện có của thôn; không tạo trùng.
+// - Nhóm theo BLOCK liên tiếp cùng tên chủ hộ (giữ cấu trúc file); tách hộ mới khi gặp
+//   dòng-chủ-hộ thứ 2 cùng tên (trùng tên thật → 2 hộ). GIỮ NGUYÊN DẤU khi so tên
+//   (Thanh/Thành/Thạnh là người khác nhau, không được gộp).
+// - Chủ hộ không có dòng riêng → tạo bản ghi chủ hộ từ cột CHỦ HỘ.
+// - Dedup theo HỌ TÊN (giữ dấu) so với dân hiện có; trùng SĐT-khác-tên vẫn tạo (báo để rà).
 // - Không có ngày sinh/CCCD/giới tính trong file → để trống.
 // Dry-run mặc định; thêm --commit để ghi thật.
-//   node scripts/importRosterLeSonNam.js "<đường dẫn .xlsx>"
-//   node scripts/importRosterLeSonNam.js "<đường dẫn .xlsx>" --commit
+//   node scripts/importRosterLeSonNam.js "<đường dẫn .xlsx>" [--commit]
 require("dotenv").config();
 const path = require("path");
 const ExcelJS = require("exceljs");
@@ -19,9 +21,8 @@ const EXCEL_PATH = args[0] || "C:/Users/DELL/Downloads/Kích hoạt BHYT Lệ S�
 const VILLAGE_NAME = "Lệ Sơn Nam";
 
 const pad3 = (n) => String(n).padStart(3, "0");
-const normKey = (s) =>
-  (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d")
-    .toLowerCase().replace(/\s+/g, " ").trim();
+// GIỮ NGUYÊN DẤU (chỉ thường hóa + gộp khoảng trắng) — KHÔNG bỏ dấu để tránh gộp nhầm.
+const nameKey = (s) => (s || "").toString().toLowerCase().replace(/\s+/g, " ").trim();
 
 function cleanPhone(raw) {
   if (raw == null) return null;
@@ -55,34 +56,34 @@ async function main() {
   console.log(`Số dòng người: ${rows.length}`);
   const badPhone = rows.filter((r) => r.sdtRaw && !r.sdt).length;
 
-  // Nhóm theo tên chủ hộ
-  const groups = new Map();
+  // Nhóm theo BLOCK liên tiếp cùng tên chủ hộ; tách hộ mới khi đổi tên chủ hộ HOẶC
+  // gặp dòng-chủ-hộ thứ 2 cùng tên trong cùng block (trùng tên thật → 2 hộ riêng).
+  const households = [];
+  let cur = null;
   for (const r of rows) {
-    const key = normKey(r.chuHo);
-    if (!groups.has(key)) groups.set(key, { chuHo: r.chuHo, rows: [] });
-    groups.get(key).rows.push(r);
+    const isHead = nameKey(r.hoTen) === nameKey(r.chuHo);
+    const changed = !cur || nameKey(r.chuHo) !== cur.chuHoKey || (isHead && cur.hasHead);
+    if (changed) { cur = { chuHo: r.chuHo, chuHoKey: nameKey(r.chuHo), rows: [], hasHead: false }; households.push(cur); }
+    cur.rows.push(r);
+    if (isHead) cur.hasHead = true;
   }
-  // Cảnh báo: nhóm có >1 dòng tự nhận là chủ hộ (có thể là 2 hộ trùng tên bị gộp)
-  const dupHeadNames = [];
-  for (const g of groups.values()) {
-    const selfHeads = g.rows.filter((r) => normKey(r.hoTen) === normKey(g.chuHo)).length;
-    if (selfHeads > 1) dupHeadNames.push(`${g.chuHo} (${selfHeads})`);
-  }
+  // Tên chủ hộ trùng đã được tách thành nhiều hộ riêng (đúng, không gộp)
+  const cnt = new Map();
+  households.forEach((h) => cnt.set(h.chuHoKey, (cnt.get(h.chuHoKey) || 0) + 1));
+  const splitDup = [...cnt.entries()].filter(([, c]) => c > 1).map(([k, c]) => `${k} (${c})`);
 
   const village = await prisma.village.findFirst({ where: { ten: { equals: VILLAGE_NAME, mode: "insensitive" } } });
   if (!village) throw new Error(`Không tìm thấy thôn ${VILLAGE_NAME}`);
 
-  // Dân hiện có của thôn → map dedup
+  // Dân hiện có của thôn → map dedup (theo họ tên GIỮ DẤU + SĐT)
   const existing = await prisma.member.findMany({
     where: { household: { villageId: village.id } },
     select: { id: true, hoTen: true, sdt: true, householdId: true },
   });
   const byPhone = new Map(); existing.forEach((m) => { if (m.sdt) byPhone.set(m.sdt, m); });
-  const byName = new Map(); existing.forEach((m) => { const k = normKey(m.hoTen); if (!byName.has(k)) byName.set(k, m); });
-  // Dedup TÊN là chính (SĐT hay dùng chung trong hộ nên không tin cậy để phân biệt người).
-  // Trùng SĐT nhưng khác tên → KHÔNG bỏ qua (vẫn tạo), chỉ báo để rà.
+  const byName = new Map(); existing.forEach((m) => { const k = nameKey(m.hoTen); if (!byName.has(k)) byName.set(k, m); });
   const match = (hoTen, sdt) => {
-    const n = byName.get(normKey(hoTen));
+    const n = byName.get(nameKey(hoTen));
     if (n) return { ex: n, reason: "name" };
     if (sdt) { const p = byPhone.get(sdt); if (p) return { ex: p, reason: "phone" }; }
     return null;
@@ -99,9 +100,9 @@ async function main() {
   let seq = maxSeq;
   const plans = [];
 
-  for (const { chuHo, rows: gr } of groups.values()) {
-    const headKey = normKey(chuHo);
-    let headRow = gr.find((r) => normKey(r.hoTen) === headKey);
+  for (const { chuHo, rows: gr } of households) {
+    const headKey = nameKey(chuHo);
+    let headRow = gr.find((r) => nameKey(r.hoTen) === headKey);
     if (!headRow) { headRow = { hoTen: chuHo, sdt: null }; syntheticHeads++; }
     const to = gr.find((r) => r.to)?.to || null;
 
@@ -136,15 +137,15 @@ async function main() {
   }
 
   console.log(`\n=== KẾ HOẠCH (thôn ${village.ten}, ma ${village.ma}) ===`);
-  console.log(`Tổng hộ trong file: ${groups.size}`);
+  console.log(`Tổng hộ trong file: ${households.length}`);
   console.log(`Hộ MỚI sẽ tạo: ${newHouseholds}  (mã ${prefix}-${pad3(maxSeq + 1)} … ${prefix}-${pad3(seq)})`);
   console.log(`Nhân khẩu MỚI sẽ tạo: ${newMembers}`);
   console.log(`Chủ hộ tạo thêm (không có dòng riêng): ${syntheticHeads}`);
   console.log(`Bỏ qua vì TRÙNG TÊN người đã có: ${skippedByName}`);
   console.log(`Nhân khẩu không SĐT: ${noPhone}  ·  SĐT sai định dạng (để trống): ${badPhone}`);
-  if (phoneOnly) console.log(`⚠ ${phoneOnly} người TRÙNG SĐT nhưng khác tên (VẪN TẠO — có thể chung SĐT gia đình; rà nếu cần):\n   ${samplesPhone.join("\n   ")}`);
-  if (dupHeadNames.length) console.log(`⚠ ${dupHeadNames.length} tên chủ hộ có nhiều dòng tự-chủ-hộ (có thể là hộ trùng tên bị gộp): ${dupHeadNames.slice(0, 10).join(", ")}${dupHeadNames.length > 10 ? " ..." : ""}`);
-  if (samplesName.length) console.log(`\nMẫu bỏ qua do trùng tên:\n   ${samplesName.join("\n   ")}`);
+  if (splitDup.length) console.log(`✔ ${splitDup.length} tên chủ hộ TRÙNG đã tách thành hộ riêng (đúng): ${splitDup.slice(0, 10).join(", ")}${splitDup.length > 10 ? " ..." : ""}`);
+  if (phoneOnly) console.log(`⚠ ${phoneOnly} người TRÙNG SĐT nhưng khác tên (VẪN TẠO — có thể chung SĐT gia đình):\n   ${samplesPhone.join("\n   ")}`);
+  if (samplesName.length) console.log(`\nMẫu bỏ qua do trùng tên (kiểm nếu nghi trùng tên KHÁC người):\n   ${samplesName.join("\n   ")}`);
   console.log(`\n10 hộ mẫu sẽ tạo:`);
   plans.slice(0, 10).forEach((p) => console.log(`  ${p.soHoKhau || "→ hộ có sẵn"} | ${p.to || "(chưa rõ tổ)"} | ${p.members.map((m) => `${m.hoTen}${m.laChuHo ? "(CH)" : ""}${m.sdt ? " " + m.sdt : ""}`).join("; ")}`));
 
@@ -166,8 +167,8 @@ async function main() {
       }
     }
     for (const id of touched) {
-      const cnt = await tx.member.count({ where: { householdId: id } });
-      await tx.household.update({ where: { id }, data: { soNhanKhau: cnt } });
+      const c = await tx.member.count({ where: { householdId: id } });
+      await tx.household.update({ where: { id }, data: { soNhanKhau: c } });
     }
   }, { timeout: 180000 });
 
