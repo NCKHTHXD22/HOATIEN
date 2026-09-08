@@ -79,7 +79,14 @@ async function main() {
   });
   const byPhone = new Map(); existing.forEach((m) => { if (m.sdt) byPhone.set(m.sdt, m); });
   const byName = new Map(); existing.forEach((m) => { const k = normKey(m.hoTen); if (!byName.has(k)) byName.set(k, m); });
-  const findExisting = (hoTen, sdt) => (sdt && byPhone.get(sdt)) || byName.get(normKey(hoTen)) || null;
+  // Dedup TÊN là chính (SĐT hay dùng chung trong hộ nên không tin cậy để phân biệt người).
+  // Trùng SĐT nhưng khác tên → KHÔNG bỏ qua (vẫn tạo), chỉ báo để rà.
+  const match = (hoTen, sdt) => {
+    const n = byName.get(normKey(hoTen));
+    if (n) return { ex: n, reason: "name" };
+    if (sdt) { const p = byPhone.get(sdt); if (p) return { ex: p, reason: "phone" }; }
+    return null;
+  };
 
   // Prefix + seq từ mã hộ hiện có
   const hhs = await prisma.household.findMany({ where: { villageId: village.id }, select: { soHoKhau: true } });
@@ -87,7 +94,8 @@ async function main() {
   for (const h of hhs) { const m = (h.soHoKhau || "").match(/^(.*)-(\d+)$/); if (m) { prefix = prefix || m[1]; maxSeq = Math.max(maxSeq, parseInt(m[2], 10)); } }
   if (!prefix) prefix = "LSN";
 
-  let newHouseholds = 0, newMembers = 0, skippedExisting = 0, syntheticHeads = 0, noPhone = 0;
+  let newHouseholds = 0, newMembers = 0, skippedByName = 0, phoneOnly = 0, syntheticHeads = 0, noPhone = 0;
+  const samplesName = [], samplesPhone = [];
   let seq = maxSeq;
   const plans = [];
 
@@ -104,8 +112,15 @@ async function main() {
     ];
     memberList.forEach((m) => { if (!m.sdt) noPhone++; });
 
-    const headEx = findExisting(headRow.hoTen, headRow.sdt);
-    const toCreate = memberList.filter((m) => { const ex = findExisting(m.hoTen, m.sdt); if (ex) { skippedExisting++; return false; } return true; });
+    const headM = match(headRow.hoTen, headRow.sdt);
+    const headEx = headM && headM.reason === "name" ? headM.ex : null;
+    const toCreate = [];
+    for (const m of memberList) {
+      const mm = match(m.hoTen, m.sdt);
+      if (mm && mm.reason === "name") { skippedByName++; if (samplesName.length < 10) samplesName.push(`${m.hoTen} → đã có: ${mm.ex.hoTen}`); continue; }
+      if (mm && mm.reason === "phone") { phoneOnly++; if (samplesPhone.length < 10) samplesPhone.push(`${m.hoTen}${m.sdt ? " " + m.sdt : ""} ~trùng SĐT với~ ${mm.ex.hoTen}`); }
+      toCreate.push(m);
+    }
     if (toCreate.length === 0) continue;
 
     if (headEx) {
@@ -125,11 +140,13 @@ async function main() {
   console.log(`Hộ MỚI sẽ tạo: ${newHouseholds}  (mã ${prefix}-${pad3(maxSeq + 1)} … ${prefix}-${pad3(seq)})`);
   console.log(`Nhân khẩu MỚI sẽ tạo: ${newMembers}`);
   console.log(`Chủ hộ tạo thêm (không có dòng riêng): ${syntheticHeads}`);
-  console.log(`Bỏ qua vì đã có (khớp SĐT/tên): ${skippedExisting}`);
+  console.log(`Bỏ qua vì TRÙNG TÊN người đã có: ${skippedByName}`);
   console.log(`Nhân khẩu không SĐT: ${noPhone}  ·  SĐT sai định dạng (để trống): ${badPhone}`);
+  if (phoneOnly) console.log(`⚠ ${phoneOnly} người TRÙNG SĐT nhưng khác tên (VẪN TẠO — có thể chung SĐT gia đình; rà nếu cần):\n   ${samplesPhone.join("\n   ")}`);
   if (dupHeadNames.length) console.log(`⚠ ${dupHeadNames.length} tên chủ hộ có nhiều dòng tự-chủ-hộ (có thể là hộ trùng tên bị gộp): ${dupHeadNames.slice(0, 10).join(", ")}${dupHeadNames.length > 10 ? " ..." : ""}`);
-  console.log(`\n10 hộ mẫu:`);
-  plans.slice(0, 10).forEach((p) => console.log(`  ${p.soHoKhau || "→ hộ có sẵn"} | Tổ ${p.to || "-"} | ${p.members.map((m) => `${m.hoTen}${m.laChuHo ? "(CH)" : ""}${m.sdt ? " " + m.sdt : ""}`).join("; ")}`));
+  if (samplesName.length) console.log(`\nMẫu bỏ qua do trùng tên:\n   ${samplesName.join("\n   ")}`);
+  console.log(`\n10 hộ mẫu sẽ tạo:`);
+  plans.slice(0, 10).forEach((p) => console.log(`  ${p.soHoKhau || "→ hộ có sẵn"} | ${p.to || "(chưa rõ tổ)"} | ${p.members.map((m) => `${m.hoTen}${m.laChuHo ? "(CH)" : ""}${m.sdt ? " " + m.sdt : ""}`).join("; ")}`));
 
   if (!COMMIT) { console.log(`\n[DRY RUN] Chưa ghi gì vào DB. Thêm --commit để thực hiện.`); await prisma.$disconnect(); return; }
 
