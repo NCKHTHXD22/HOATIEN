@@ -248,6 +248,58 @@ function GroupCard({ cat, followers, villages, onDelete }) {
     }
   }
 
+  if (cat.isVillageGroup) {
+    return (
+      <>
+        <Card className="hover:shadow-md transition-shadow border-emerald-100 bg-emerald-50/30">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="text-base flex items-center gap-1.5 truncate">
+                  <span>{cat.icon}</span> <span className="truncate">{cat.name}</span>
+                </CardTitle>
+                <span className="text-[11px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium mt-0.5 inline-block">Tự động</span>
+              </div>
+            </div>
+            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium inline-block">
+              {cat.memberCount} người đã liên kết
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            >
+              <Users className="h-3.5 w-3.5" /> Xem thành viên
+            </button>
+          </CardContent>
+        </Card>
+        {open && (
+          <FullScreenModal title={`Thành viên — ${cat.name}`} icon={cat.icon} onClose={() => setOpen(false)}>
+            <div className="max-w-2xl mx-auto">
+              {isLoading ? (
+                <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+              ) : members.length === 0 ? (
+                <div className="text-center py-16 text-sm text-slate-400">Chưa có ai được liên kết trong thôn này</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {members.map((m) => (
+                    <div key={m._id} className="flex items-center gap-2.5 rounded-xl border border-slate-100 px-3 py-2.5">
+                      <Avatar name={m.displayName} avatar={m.avatar} size={8} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-700 truncate">{m.displayName || '(Chưa có tên)'}</p>
+                        <p className="text-[11px] text-slate-400 font-mono truncate">{m.zaloUserId}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </FullScreenModal>
+        )}
+      </>
+    )
+  }
+
   return (
     <>
       <Card className="hover:shadow-md transition-shadow">
@@ -485,6 +537,34 @@ function GroupCard({ cat, followers, villages, onDelete }) {
         />
       )}
     </>
+  )
+}
+
+function SyncVillageGroupsButton({ onDone }) {
+  const [loading, setLoading] = useState(false)
+  const handleSync = async () => {
+    if (loading) return
+    setLoading(true)
+    try {
+      const r = await api.post('/api/broadcast/groups/sync-village-groups')
+      toast.success(`Đã đồng bộ ${r.data.synced} nhân khẩu vào nhóm thôn`)
+      onDone?.()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Lỗi đồng bộ')
+    } finally {
+      setLoading(false)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleSync}
+      disabled={loading}
+      className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors disabled:opacity-50"
+    >
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+      Đồng bộ lại
+    </button>
   )
 }
 
@@ -920,23 +1000,55 @@ export default function SettingsPage() {
         <div className="flex items-center justify-center h-40">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : categories.length === 0 ? (
-        <div className="text-center py-12 text-sm text-slate-400">
-          <Users className="h-10 w-10 mx-auto mb-3 text-slate-200" />
-          Chưa có nhóm nào — nhấn "Thêm nhóm" để tạo
-        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {categories.map((cat) => (
-            <GroupCard
-              key={cat.group_id}
-              cat={cat}
-              followers={followers}
-              villages={villages}
-              onDelete={(id) => deleteCatMutation.mutate(id)}
-            />
-          ))}
-        </div>
+        <>
+          {/* Nhóm theo thôn (tự động tạo khi liên kết Zalo) */}
+          {categories.filter(c => c.isVillageGroup).length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-500 flex items-center gap-1.5">
+                  🏘️ Nhóm theo thôn <span className="text-[11px] font-normal bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Tự động</span>
+                </h2>
+                <SyncVillageGroupsButton onDone={() => queryClient.invalidateQueries({ queryKey: ['broadcast-groups'] })} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {categories.filter(c => c.isVillageGroup).map((cat) => (
+                  <GroupCard key={cat.group_id} cat={cat} followers={followers} villages={villages} onDelete={(id) => deleteCatMutation.mutate(id)} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Nhóm thủ công */}
+          {categories.filter(c => !c.isVillageGroup).length > 0 && (
+            <div className="space-y-3">
+              {categories.filter(c => c.isVillageGroup).length > 0 && (
+                <h2 className="text-sm font-semibold text-slate-500">📋 Nhóm thủ công</h2>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {categories.filter(c => !c.isVillageGroup).map((cat) => (
+                  <GroupCard key={cat.group_id} cat={cat} followers={followers} villages={villages} onDelete={(id) => deleteCatMutation.mutate(id)} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {categories.filter(c => c.isVillageGroup).length === 0 && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-emerald-800">🏘️ Nhóm theo thôn chưa được tạo</p>
+                <p className="text-xs text-emerald-600 mt-0.5">Nhấn đồng bộ để tự động tạo nhóm từ dữ liệu liên kết Zalo hiện tại</p>
+              </div>
+              <SyncVillageGroupsButton onDone={() => queryClient.invalidateQueries({ queryKey: ['broadcast-groups'] })} />
+            </div>
+          )}
+          {categories.length === 0 && (
+            <div className="text-center py-12 text-sm text-slate-400">
+              <Users className="h-10 w-10 mx-auto mb-3 text-slate-200" />
+              Chưa có nhóm nào — nhấn "Thêm nhóm" để tạo
+            </div>
+          )}
+        </>
       )}
 
       <AllFollowersGroupPanel />

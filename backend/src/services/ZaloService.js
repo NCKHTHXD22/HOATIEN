@@ -3,6 +3,8 @@ const ZaloSessionRepo = require("../repositories/mongo/ZaloSessionRepo");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 const ZaloFollowerRepo = require("../repositories/mongo/ZaloFollowerRepo");
 const ZaloEvent = require("../models/mongo/ZaloEvent");
+const ZaloGroup = require("../models/mongo/ZaloGroup");
+const ZaloGroupMember = require("../models/mongo/ZaloGroupMember");
 const SearchService = require("./SearchService");
 const HouseholdRepo = require("../repositories/pg/HouseholdRepo");
 const MemberRepo = require("../repositories/pg/MemberRepo");
@@ -141,6 +143,7 @@ async function _autoLink(zaloUserId, query) {
     }
     await ZaloFollowerRepo.setLink(zaloUserId, member.id);
     logger.info(`Auto-link Zalo ${zaloUserId} -> member ${member.id} (${member.hoTen}) via ${query.type}`);
+    _syncVillageGroup(member.id, zaloUserId).catch(() => {});
   } catch (e) {
     logger.warn(`Auto-link failed [${zaloUserId}]: ${e.message}`);
   }
@@ -152,6 +155,34 @@ function _normPhone(raw) {
   if (s.startsWith("+84")) s = "0" + s.slice(3);
   else if (s.startsWith("84") && s.length >= 10) s = "0" + s.slice(2);
   return /^0\d{9,10}$/.test(s) ? s : "";
+}
+
+// Sau khi liên kết Zalo thành công: tự động tạo/cập nhật nhóm theo thôn cho thành viên đó
+async function _syncVillageGroup(memberId, zaloUserId) {
+  try {
+    const { prisma } = require("../config/database");
+    const member = await prisma.member.findUnique({
+      where: { id: memberId },
+      select: { household: { select: { villageId: true, village: { select: { ten: true } } } } },
+    });
+    const villageId = member?.household?.villageId;
+    const villageName = member?.household?.village?.ten;
+    if (!villageId || !villageName) return;
+
+    const groupId = `VILLAGE-${villageId}`;
+    await ZaloGroup.findOneAndUpdate(
+      { groupId },
+      { $set: { name: `Thôn ${villageName}`, icon: "🏘️", isVillageGroup: true, villageId } },
+      { upsert: true }
+    );
+    await ZaloGroupMember.findOneAndUpdate(
+      { groupId, zaloUserId },
+      { $set: { groupId, zaloUserId } },
+      { upsert: true }
+    );
+  } catch (e) {
+    logger.warn(`_syncVillageGroup [member=${memberId}, zalo=${zaloUserId}]: ${e.message}`);
+  }
 }
 
 // Lõi liên kết theo SĐT: lưu phone vào follower + khớp nhân khẩu.
@@ -172,6 +203,7 @@ async function _linkByPhone(zaloUserId, rawPhone) {
     if (m.zaloUserId !== zaloUserId) await MemberRepo.update(m.id, { zaloUserId: zaloUserId });
     await ZaloFollowerRepo.setLink(zaloUserId, m.id);
     logger.info(`Auto-link Zalo ${zaloUserId} -> member ${m.id} (${m.hoTen}) via phone ${phone}`);
+    _syncVillageGroup(m.id, zaloUserId).catch(() => {});
     return { status: "linked", phone, member: m };
   }
   return { status: candidates.length === 0 ? "saved" : "ambiguous", phone };
@@ -481,6 +513,7 @@ async function _runAutoLink(jobId, villageId) {
             ZaloFollowerRepo.setLink(r.userId, member.id, { displayName: r.displayName, avatar: r.avatar }),
             prisma.member.update({ where: { id: member.id }, data: { zaloUserId: r.userId } }),
           ]);
+          _syncVillageGroup(member.id, r.userId).catch(() => {});
           results.linked.push({ hoTen: member.hoTen, sdt: member.sdt, zaloId: r.userId, displayName: r.displayName });
         }
       } else if (r.status === "not_follower") {
@@ -599,4 +632,4 @@ async function sendToFollowers(userIds, text, attachments = []) {
   return results;
 }
 
-module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState, getProfileByPhone, startAutoLink, getAutoLinkJob, startCreateGroupAllFollowers, getCreateGroupAllFollowersJob };
+module.exports = { handleMessage, handleFollow, handleUserSubmitInfo, sendMessage, startSyncFollowers, isSyncing, sendToFollowers, startScanConversations, getScanState, getProfileByPhone, startAutoLink, getAutoLinkJob, startCreateGroupAllFollowers, getCreateGroupAllFollowersJob, syncVillageGroup: _syncVillageGroup };

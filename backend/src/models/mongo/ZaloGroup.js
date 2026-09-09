@@ -6,6 +6,8 @@ const ZaloGroupSchema = new Schema(
     name:    { type: String, default: "" },
     icon:    { type: String, default: "📋" },
     autoApprove: { type: Boolean, default: false },
+    isVillageGroup: { type: Boolean, default: false },
+    villageId: { type: String, default: null },
     createdAt: { type: Date, default: Date.now },
   },
   { collection: "zalo_groups" }

@@ -112,6 +112,7 @@ router.post("/followers/:userId/link", async (req, res, next) => {
       ZaloFollowerRepo.setLink(userId, memberId),
       prisma.member.update({ where: { id: memberId }, data: { zaloUserId: userId } }),
     ]);
+    ZaloService.syncVillageGroup(memberId, userId).catch(() => {});
     ok(res, { ok: true, userId, memberId, hoTen: member.hoTen });
   } catch (err) { next(err); }
 });
@@ -126,6 +127,8 @@ router.delete("/followers/:userId/link", async (req, res, next) => {
     if (oldMemberId) {
       await prisma.member.updateMany({ where: { id: oldMemberId }, data: { zaloUserId: null } });
     }
+    // Xóa khỏi tất cả nhóm thôn tự động
+    ZaloGroupMember.deleteMany({ zaloUserId: userId, groupId: /^VILLAGE-/ }).catch(() => {});
     ok(res, { ok: true });
   } catch (err) { next(err); }
 });
@@ -187,10 +190,19 @@ router.post("/followers/sync", async (req, res, next) => {
 
 // ── Groups (nhóm Zalo) ─────────────────────────────────────────────
 async function listGroups() {
-  const docs = await ZaloGroup.find().sort({ name: 1 }).lean();
+  const docs = await ZaloGroup.find().sort({ isVillageGroup: -1, name: 1 }).lean();
   const counts = await ZaloGroupMember.aggregate([{ $group: { _id: "$groupId", n: { $sum: 1 } } }]);
   const cmap = Object.fromEntries(counts.map((c) => [c._id, c.n]));
-  return docs.map((g) => ({ id: String(g._id), group_id: g.groupId, name: g.name, icon: g.icon || "📋", memberCount: cmap[g.groupId] || 0, autoApprove: g.autoApprove || false }));
+  return docs.map((g) => ({
+    id: String(g._id),
+    group_id: g.groupId,
+    name: g.name,
+    icon: g.icon || "📋",
+    memberCount: cmap[g.groupId] || 0,
+    autoApprove: g.autoApprove || false,
+    isVillageGroup: g.isVillageGroup || false,
+    villageId: g.villageId || null,
+  }));
 }
 
 // Zalo có thể trả về string id hoặc object cho 1 người đang chờ duyệt — chuẩn hóa lại
@@ -283,6 +295,22 @@ router.get("/groups/create-zalo-all-followers-status/:jobId", async (req, res, n
     const job = ZaloService.getCreateGroupAllFollowersJob(req.params.jobId);
     if (!job) return fail(res, "Không tìm thấy job", 404);
     ok(res, job);
+  } catch (err) { next(err); }
+});
+
+// Đồng bộ toàn bộ nhóm thôn từ dữ liệu hiện tại (chạy lần đầu hoặc khi cần rebuild)
+router.post("/groups/sync-village-groups", async (req, res, next) => {
+  try {
+    const linked = await prisma.member.findMany({
+      where: { zaloUserId: { not: null } },
+      select: { id: true, zaloUserId: true },
+    });
+    let count = 0;
+    for (const m of linked) {
+      await ZaloService.syncVillageGroup(m.id, m.zaloUserId);
+      count++;
+    }
+    ok(res, { ok: true, synced: count });
   } catch (err) { next(err); }
 });
 
