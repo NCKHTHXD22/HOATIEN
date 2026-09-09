@@ -161,13 +161,19 @@ function _normPhone(raw) {
 async function _syncVillageGroup(memberId, zaloUserId) {
   try {
     const { prisma } = require("../config/database");
-    const member = await prisma.member.findUnique({
-      where: { id: memberId },
-      select: { household: { select: { villageId: true, village: { select: { ten: true } } } } },
-    });
+    const [member, follower] = await Promise.all([
+      prisma.member.findUnique({
+        where: { id: memberId },
+        select: { hoTen: true, household: { select: { villageId: true, village: { select: { ten: true } } } } },
+      }),
+      ZaloFollowerRepo.findByUserId(zaloUserId),
+    ]);
     const villageId = member?.household?.villageId;
     const villageName = member?.household?.village?.ten;
     if (!villageId || !villageName) return;
+
+    const displayName = follower?.displayName || member?.hoTen || "";
+    const avatar = follower?.avatar || "";
 
     const groupId = `VILLAGE-${villageId}`;
     await ZaloGroup.findOneAndUpdate(
@@ -177,7 +183,7 @@ async function _syncVillageGroup(memberId, zaloUserId) {
     );
     await ZaloGroupMember.findOneAndUpdate(
       { groupId, zaloUserId },
-      { $set: { groupId, zaloUserId } },
+      { $set: { groupId, zaloUserId, displayName, avatar } },
       { upsert: true }
     );
   } catch (e) {
