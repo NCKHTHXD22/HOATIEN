@@ -37,7 +37,9 @@ async function sendToUsers(userIds, message, attachments = {}, adminNote, linkUr
         if (text) await zalo.sendText(id, text, isGroup);
         if (attachmentIds.length > 0) await zalo.sendImages(id, attachmentIds, isGroup);
         if (videoAttachmentId) await zalo.sendText(id, `📹 Xem video: ${videoAttachmentId}`, isGroup);
-        if (fileAttachmentId) await zalo.sendFile(id, fileAttachmentId, isGroup);
+        // File > 5MB không upload được lên Zalo → fileAttachmentId là URL trên server, gửi dạng link tải
+        if (fileAttachmentId?.startsWith("http")) await zalo.sendText(id, `📎 Tải file đính kèm: ${fileAttachmentId}`, isGroup);
+        else if (fileAttachmentId) await zalo.sendFile(id, fileAttachmentId, isGroup);
 
         job.sent++;
       } catch (err) {

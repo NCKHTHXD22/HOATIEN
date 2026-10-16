@@ -469,6 +469,16 @@ router.post("/upload/file", (req, res) => {
   upload(req, res, async (err) => {
     if (err) return res.status(400).json({ success: false, error: err.message });
     if (!req.file) return res.status(400).json({ success: false, error: "Không có file" });
+    // Zalo OA chỉ nhận file <= 5MB → file lớn hơn giữ lại trên server, gửi dạng link tải (attachmentId là URL)
+    if (req.file.size > 5 * 1024 * 1024) {
+      // Multer đọc tên file dạng latin1 → đổi về UTF-8, bỏ dấu + ký tự lạ để URL gọn và an toàn
+      const original = Buffer.from(req.file.originalname, "latin1").toString("utf8");
+      const safeName = path.basename(original).normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .replace(/[đĐ]/g, "d").replace(/[^\w.-]+/g, "_");
+      const filename = `file_${Date.now()}_${safeName}`;
+      fs.renameSync(req.file.path, path.join(UPLOAD_DIR, filename));
+      return res.json({ ok: true, success: true, attachmentId: `${PUBLIC_BASE}/uploads/${filename}`, filename: original });
+    }
     try {
       const attachmentId = await uploadFileToZalo(req.file.path, req.file.originalname);
       fs.unlink(req.file.path, () => {});
