@@ -44,7 +44,15 @@ async function needsRefresh() {
   return ttl < REFRESH_BUFFER_S;
 }
 
-async function refreshAccessToken() {
+// Refresh token Zalo xoay vòng (dùng 1 lần) → nhiều request cùng refresh song song sẽ làm hỏng token.
+// Gom các lời gọi đồng thời về chung 1 promise.
+let refreshing = null;
+function refreshAccessToken() {
+  if (!refreshing) refreshing = _refreshAccessToken().finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+async function _refreshAccessToken() {
   const refreshToken =
     (await redis.get(KEY_REFRESH)) || env.ZALO_OA_REFRESH_TOKEN;
 
