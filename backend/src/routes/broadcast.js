@@ -430,17 +430,20 @@ function makeUpload(filenamePrefix, opts) {
 
 router.post("/upload/image", (req, res) => {
   const upload = makeUpload("img", {
-    limits: { fileSize: 10 * 1024 * 1024 },
+    // Busboy báo lỗi khi chạm giới hạn; +1 để nhận cả ảnh đúng 10MB.
+    limits: { fileSize: 10 * 1024 * 1024 + 1 },
     fileFilter: (_, file, cb) => (file.mimetype.startsWith("image/") ? cb(null, true) : cb(new Error("Chỉ nhận file ảnh"))),
   }).array("images", 5);
   upload(req, res, async (err) => {
-    if (err) return res.status(400).json({ success: false, error: err.message });
+    if (err) return res.status(400).json({ success: false, error: err.code === "LIMIT_FILE_SIZE" ? "Ảnh vượt quá dung lượng tối đa 10MB/ảnh" : err.message });
     if (!req.files?.length) return res.status(400).json({ success: false, error: "Không có file" });
     try {
       const attachmentIds = await Promise.all(req.files.map(async (file) => {
-        const id = await uploadImageToZalo(file.path);
-        fs.unlink(file.path, () => {});
-        return id;
+        try {
+          return await uploadImageToZalo(file.path);
+        } finally {
+          fs.unlink(file.path, () => {});
+        }
       }));
       res.json({ ok: true, success: true, attachmentIds });
     } catch (e) {

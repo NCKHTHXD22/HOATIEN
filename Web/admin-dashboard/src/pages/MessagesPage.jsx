@@ -185,6 +185,10 @@ function SendTab({ followers, groups, syncedAt }) {
   async function handleImageFiles(files) {
     const allowed = Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, 5 - imgPreviews.length)
     if (!allowed.length) return
+    if (allowed.some(f => f.size > 10 * 1024 * 1024)) {
+      toast.error('Ảnh vượt quá dung lượng tối đa 10MB/ảnh')
+      return
+    }
     const previews = allowed.map(f => ({ file: f, url: URL.createObjectURL(f), id: null }))
     setImgPreviews(prev => [...prev, ...previews])
 
@@ -1139,6 +1143,10 @@ function ScheduleTab({ followers, groups }) {
   async function handleImageFiles(files) {
     const allowed = Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, 5 - imgPreviews.length)
     if (!allowed.length) return
+    if (allowed.some(f => f.size > 10 * 1024 * 1024)) {
+      toast.error('Ảnh vượt quá dung lượng tối đa 10MB/ảnh')
+      return
+    }
     const previews = allowed.map(f => ({ file: f, url: URL.createObjectURL(f), id: null }))
     setImgPreviews(prev => [...prev, ...previews])
     const fd = new FormData()

@@ -2,6 +2,7 @@
 const axios = require("axios").default;
 const fs = require("fs");
 const path = require("path");
+const sharp = require("sharp");
 const ZaloConfigRepo = require("../repositories/mongo/ZaloConfigRepo");
 
 const MSG_API = "https://openapi.zalo.me/v2.0/oa/message";
@@ -71,9 +72,31 @@ async function _upload(url, buildForm) {
 // Upload ảnh từ file local -> trả attachment_id
 async function uploadImageToZalo(filepath) {
   const FormData = require("form-data");
+  let image = await fs.promises.readFile(filepath);
+  let filename = path.basename(filepath);
+  if (image.length > 10 * 1024 * 1024) throw new Error("Ảnh vượt quá dung lượng tối đa 10MB/ảnh");
+
+  // Nhận ảnh gốc tới 10MB; API Zalo chỉ nhận JPG/PNG tối đa 1MB.
+  const zaloMaxBytes = 1000000;
+  if (image.length > zaloMaxBytes) {
+    const source = sharp(image).rotate().flatten({ background: "#ffffff" });
+    let { data, info } = await source.clone().jpeg({ quality: 85 }).toBuffer({ resolveWithObject: true });
+    while (data.length > zaloMaxBytes) {
+      const scale = Math.min(0.9, Math.sqrt(zaloMaxBytes / data.length) * 0.95);
+      ({ data, info } = await source.clone().resize({
+        width: Math.max(1, Math.floor(info.width * scale)),
+        height: Math.max(1, Math.floor(info.height * scale)),
+        fit: "inside",
+        withoutEnlargement: true,
+      }).jpeg({ quality: 85 }).toBuffer({ resolveWithObject: true }));
+    }
+    image = data;
+    filename = `${path.parse(filepath).name}.jpg`;
+  }
+
   const build = () => {
     const form = new FormData();
-    form.append("file", fs.readFileSync(filepath), { filename: path.basename(filepath) });
+    form.append("file", image, { filename });
     return form;
   };
   const res = await _upload("https://openapi.zalo.me/v2.0/oa/upload/image", build);
